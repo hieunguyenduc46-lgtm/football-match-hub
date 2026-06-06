@@ -1,0 +1,21 @@
+# Render Blueprint cho backend FastAPI.
+# Trên Render: New + -> Blueprint -> chọn repo này. Render tự đọc file này.
+services:
+  - type: web
+    name: football-match-hub-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: USE_MOCK
+        value: "true"            # đổi "false" khi đã có API_FOOTBALL_KEY
+      - key: API_FOOTBALL_KEY
+        sync: false              # tự nhập trong dashboard Render (bí mật)
+      - key: API_FOOTBALL_VIA
+        value: "direct"
+      - key: SEASON
+        value: "2025"
+      - key: FRONTEND_ORIGIN
+        sync: false              # dán URL frontend đã deploy, vd https://...vercel.app

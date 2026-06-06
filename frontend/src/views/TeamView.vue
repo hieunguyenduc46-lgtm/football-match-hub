@@ -1,0 +1,123 @@
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import api from '../services/api'
+import { imgFallback, matchDay, matchTime } from '../utils/format'
+import FavButton from '../components/FavButton.vue'
+
+const route = useRoute()
+const router = useRouter()
+// teamId phải REACTIVE: khi đổi đội (đổi :id) thì các computed phụ thuộc cũng cập nhật.
+const teamId = computed(() => Number(route.params.id))
+const team = ref(null)
+const recent = ref([])
+const upcoming = ref([])
+const loading = ref(true)
+
+// Kết quả 1 trận xét theo đội đang xem: W / D / L.
+function resultFor(m) {
+  const gh = m.goals.home, ga = m.goals.away
+  if (gh === ga) return 'D'
+  const homeWon = gh > ga
+  const isHome = m.teams.home.id === teamId.value
+  return (homeWon && isHome) || (!homeWon && !isHome) ? 'W' : 'L'
+}
+const form = computed(() => recent.value.map(resultFor))
+
+let loadSeq = 0
+async function loadTeam(id) {
+  const seq = ++loadSeq
+  loading.value = true
+  team.value = null
+  recent.value = []
+  upcoming.value = []
+  const [tRes, fRes, uRes] = await Promise.allSettled([
+    api.get(`/teams/${id}`),
+    api.get(`/teams/${id}/fixtures`),
+    api.get(`/teams/${id}/upcoming`),
+  ])
+  if (seq !== loadSeq) return                    // đã chuyển sang đội khác
+  if (tRes.status === 'fulfilled') team.value = tRes.value.data.response?.[0] || null
+  if (fRes.status === 'fulfilled') recent.value = fRes.value.data.response || []
+  if (uRes.status === 'fulfilled') upcoming.value = uRes.value.data.response || []
+  loading.value = false
+}
+
+onMounted(() => loadTeam(teamId.value))
+// Đổi đội mà không remount -> phải watch để tải lại.
+watch(() => route.params.id, (id) => { if (id) loadTeam(Number(id)) })
+
+function goMatch(id) { router.push({ name: 'match', params: { id } }) }
+</script>
+
+<template>
+  <router-link to="/" class="back">{{ $t('backHome') }}</router-link>
+
+  <div v-if="loading" class="skeleton" style="height:100px"></div>
+  <div v-else-if="!team" class="center">{{ $t('teamNoData') }}</div>
+
+  <div v-else>
+    <div class="player-hero">
+      <img :src="team.team.logo" class="photo" style="border-radius:12px" @error="imgFallback" />
+      <div>
+        <h1>{{ team.team.name }}</h1>
+        <div class="meta">{{ team.venue?.name }} · {{ team.venue?.capacity?.toLocaleString() }} {{ $t('seats') }} · {{ $t('since') }} {{ team.team.founded }}</div>
+        <div style="margin-top:8px">
+          <FavButton type="team" :item="{ id: team.team.id, name: team.team.name, logo: team.team.logo }" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Phong độ -->
+    <div v-if="form.length" class="form-row">
+      <span class="muted" style="font-size:13px">{{ $t('form') }}</span>
+      <span v-for="(r, i) in form" :key="i" class="form-b" :class="'f-' + r">{{ r }}</span>
+    </div>
+
+    <!-- Trận sắp đá -->
+    <template v-if="upcoming.length">
+      <h2 class="page-title" style="font-size:16px">{{ $t('upcomingMatches') }}</h2>
+      <div
+        v-for="m in upcoming"
+        :key="m.fixture.id"
+        class="match-card"
+        style="grid-template-columns:54px 1fr auto"
+        @click="goMatch(m.fixture.id)"
+      >
+        <span class="muted" style="font-size:12px">{{ matchDay(m.fixture.date) }}</span>
+        <span style="font-size:14px">{{ m.teams.home.name }} v {{ m.teams.away.name }}</span>
+        <span class="muted" style="font-size:13px">{{ matchTime(m.fixture.date) }}</span>
+      </div>
+    </template>
+
+    <!-- Trận gần đây -->
+    <template v-if="recent.length">
+      <h2 class="page-title" style="font-size:16px">{{ $t('recentMatches') }}</h2>
+      <div
+        v-for="m in recent"
+        :key="m.fixture.id"
+        class="match-card"
+        style="grid-template-columns:54px 1fr auto"
+        @click="goMatch(m.fixture.id)"
+      >
+        <span class="muted" style="font-size:12px">{{ matchDay(m.fixture.date) }}</span>
+        <span style="font-size:14px">{{ m.teams.home.name }} v {{ m.teams.away.name }}</span>
+        <strong>{{ m.goals.home }}-{{ m.goals.away }}</strong>
+      </div>
+    </template>
+
+    <!-- Đội hình -->
+    <h2 class="page-title">{{ $t('squad') }}</h2>
+    <router-link
+      v-for="p in team.squad"
+      :key="p.id"
+      :to="{ name: 'player', params: { id: p.id } }"
+      class="match-card"
+      style="grid-template-columns:44px 1fr auto"
+    >
+      <img :src="p.photo" @error="imgFallback" style="width:36px;height:36px;border-radius:50%;object-fit:cover" />
+      <span style="font-weight:600">{{ p.name }}</span>
+      <span class="muted">#{{ p.number }} · {{ p.pos }}</span>
+    </router-link>
+  </div>
+</template>

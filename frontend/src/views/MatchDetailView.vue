@@ -1,0 +1,258 @@
+<script setup>
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import api from '../services/api'
+import { isLive, isFinished, matchTime, matchDay, imgFallback } from '../utils/format'
+import LineupPitch from '../components/LineupPitch.vue'
+import MatchTimeline from '../components/MatchTimeline.vue'
+import MatchStats from '../components/MatchStats.vue'
+import PlayerRatings from '../components/PlayerRatings.vue'
+import H2HList from '../components/H2HList.vue'
+
+const route = useRoute()
+let id = route.params.id   // đổi trận sẽ gán lại (xem watch ở dưới)
+const fixture = ref(null)
+const lineups = ref([])
+const events = ref([])
+const stats = ref([])
+const ratings = ref([])
+const h2h = ref([])
+const standings = ref([])
+const loading = ref(true)
+const error = ref(null)
+const tab = ref('lineup')
+
+let timer = null
+
+// Phút ghi bàn: kèm bù giờ nếu có (vd 90+3).
+function minuteLabel(time) {
+  if (!time) return ''
+  return time.extra ? `${time.elapsed}+${time.extra}` : `${time.elapsed}`
+}
+
+// Tóm tắt bàn thắng tách theo 2 bên, đọc thẳng từ "events" đã tải.
+// Lưu ý: phản lưới nhà (Own Goal) tính cho ĐỘI ĐỐI PHƯƠNG, nên phải đổi bên.
+const goalSummary = computed(() => {
+  const out = { home: [], away: [] }
+  if (!fixture.value) return out
+  const homeId = fixture.value.teams.home.id
+  for (const e of events.value) {
+    if (e.type !== 'Goal' || e.detail === 'Missed Penalty') continue
+    const og = e.detail === 'Own Goal'
+    const scoredByHome = e.team.id === homeId
+    const side = og ? (scoredByHome ? 'away' : 'home') : (scoredByHome ? 'home' : 'away')
+    out[side].push({
+      id: e.player?.id || null,
+      name: e.player?.name || '—',
+      minute: minuteLabel(e.time),
+      pen: e.detail === 'Penalty',
+      og,
+    })
+  }
+  return out
+})
+
+// Thứ hạng giải: gộp mọi bảng (giải thường 1 bảng) rồi tra theo team id.
+const standingRows = computed(() => (standings.value?.[0]?.league?.standings || []).flat())
+function rankOf(teamId) {
+  const r = standingRows.value.find((x) => x.team?.id === teamId)
+  return r ? r.rank : null
+}
+const homeRank = computed(() => rankOf(fixture.value?.teams.home.id))
+const awayRank = computed(() => rankOf(fixture.value?.teams.away.id))
+
+let loadSeq = 0
+async function loadMatch() {
+  const seq = ++loadSeq
+  clearInterval(timer)          // dừng timer của trận cũ
+  // Reset toàn bộ trạng thái + cache tab để không lẫn dữ liệu trận trước.
+  loading.value = true
+  error.value = null
+  fixture.value = null
+  lineups.value = []
+  events.value = []
+  stats.value = []
+  ratings.value = []
+  h2h.value = []
+  standings.value = []
+  tab.value = 'lineup'
+  fetched = {}
+
+  const [fRes, lRes, eRes] = await Promise.allSettled([
+    api.get(`/fixtures/${id}`),
+    api.get(`/fixtures/${id}/lineups`),
+    api.get(`/fixtures/${id}/events`),
+  ])
+  if (seq !== loadSeq) return                     // đã chuyển sang trận khác
+  if (fRes.status === 'fulfilled') fixture.value = fRes.value.data.response?.[0] || null
+  else error.value = fRes.reason?.message || 'Không tải được trận đấu'
+  if (lRes.status === 'fulfilled') lineups.value = lRes.value.data.response || []
+  if (eRes.status === 'fulfilled') events.value = eRes.value.data.response || []
+  loading.value = false
+
+  // Tải BXH để hiện thứ hạng dưới tên đội (đúng giải + mùa của trận).
+  if (fixture.value?.league) {
+    api.get('/standings', { params: { league: fixture.value.league.id, season: fixture.value.league.season } })
+      .then(({ data }) => { if (seq === loadSeq) standings.value = data.response || [] })
+      .catch(() => {})
+  }
+
+  // Trận đang đá -> cập nhật mỗi 15s (nhịp làm tươi của API), chỉ khi tab đang mở.
+  timer = setInterval(() => {
+    if (!document.hidden && fixture.value && isLive(fixture.value.fixture.status.short)) refresh()
+  }, 15000)
+}
+
+onMounted(loadMatch)
+// Đổi trận mà không remount -> gán lại id, tải lại.
+watch(() => route.params.id, (newId) => { if (newId) { id = newId; loadMatch() } })
+
+async function refresh() {
+  const [fRes, eRes] = await Promise.allSettled([
+    api.get(`/fixtures/${id}`),
+    api.get(`/fixtures/${id}/events`),
+  ])
+  if (fRes.status === 'fulfilled') fixture.value = fRes.value.data.response?.[0] || fixture.value
+  if (eRes.status === 'fulfilled') events.value = eRes.value.data.response || events.value
+}
+
+// Lazy-load dữ liệu tab khi mở lần đầu (tiết kiệm request khi dùng API thật).
+let fetched = {}
+async function selectTab(name) {
+  tab.value = name
+  if (fetched[name]) return
+  fetched[name] = true
+  try {
+    if (name === 'stats') {
+      const { data } = await api.get(`/fixtures/${id}/statistics`)
+      stats.value = data.response || []
+    } else if (name === 'ratings') {
+      const { data } = await api.get(`/fixtures/${id}/players`)
+      ratings.value = data.response || []
+    } else if (name === 'h2h') {
+      const params = { home: fixture.value?.teams.home.id, away: fixture.value?.teams.away.id }
+      const { data } = await api.get(`/fixtures/${id}/h2h`, { params })
+      h2h.value = data.response || []
+    }
+  } catch (e) {
+    fetched[name] = false // cho phép thử lại
+  }
+}
+
+onUnmounted(() => clearInterval(timer))
+</script>
+
+<template>
+  <router-link to="/" class="back">{{ $t('backHome') }}</router-link>
+
+  <div v-if="loading" class="skeleton" style="height:120px"></div>
+  <div v-else-if="error" class="error-box">{{ error }}</div>
+  <div v-else-if="!fixture" class="center">{{ $t('matchNotFound') }}</div>
+
+  <div v-else>
+    <p class="muted" style="text-align:center">
+      {{ fixture.league.name }} · {{ matchDay(fixture.fixture.date) }} · {{ matchTime(fixture.fixture.date) }}
+    </p>
+
+    <div style="display:flex; align-items:center; justify-content:space-around; padding:18px 0;">
+      <router-link :to="{ name: 'team', params: { id: fixture.teams.home.id } }" style="text-align:center; width:38%;">
+        <img :src="fixture.teams.home.logo" @error="imgFallback" style="width:56px;height:56px;object-fit:contain" />
+        <div style="margin-top:8px;font-weight:600">{{ fixture.teams.home.name }}</div>
+        <div v-if="homeRank" class="rank-badge">#{{ homeRank }}</div>
+      </router-link>
+
+      <div style="text-align:center">
+        <div style="font-size:34px;font-weight:800" v-if="fixture.goals.home !== null">
+          {{ fixture.goals.home }} - {{ fixture.goals.away }}
+        </div>
+        <div style="font-size:20px;font-weight:700" v-else>vs</div>
+        <div class="muted" style="margin-top:4px;font-size:13px">
+          <span v-if="isLive(fixture.fixture.status.short)" style="color:var(--live)">● {{ fixture.fixture.status.elapsed }}'</span>
+          <span v-else-if="isFinished(fixture.fixture.status.short)">{{ $t('finished') }}</span>
+          <span v-else>{{ $t('notStarted') }}</span>
+        </div>
+      </div>
+
+      <router-link :to="{ name: 'team', params: { id: fixture.teams.away.id } }" style="text-align:center; width:38%;">
+        <img :src="fixture.teams.away.logo" @error="imgFallback" style="width:56px;height:56px;object-fit:contain" />
+        <div style="margin-top:8px;font-weight:600">{{ fixture.teams.away.name }}</div>
+        <div v-if="awayRank" class="rank-badge">#{{ awayRank }}</div>
+      </router-link>
+    </div>
+
+    <!-- Tóm tắt bàn thắng: tên cầu thủ + phút, ngay dưới tỉ số -->
+    <div v-if="goalSummary.home.length || goalSummary.away.length" class="goal-summary">
+      <div class="gs-side">
+        <div v-for="(g, i) in goalSummary.home" :key="'h' + i" class="gs-item">
+          <router-link v-if="g.id" :to="{ name: 'player', params: { id: g.id } }" class="gs-name link">{{ g.name }}</router-link>
+          <span v-else class="gs-name">{{ g.name }}</span>
+          <span class="gs-min">{{ g.minute }}'</span>
+          <span v-if="g.pen" class="gs-tag">(P)</span>
+          <span v-if="g.og" class="gs-tag">(OG)</span>
+        </div>
+      </div>
+      <div class="gs-ball">⚽</div>
+      <div class="gs-side right">
+        <div v-for="(g, i) in goalSummary.away" :key="'a' + i" class="gs-item">
+          <span v-if="g.pen" class="gs-tag">(P)</span>
+          <span v-if="g.og" class="gs-tag">(OG)</span>
+          <span class="gs-min">{{ g.minute }}'</span>
+          <router-link v-if="g.id" :to="{ name: 'player', params: { id: g.id } }" class="gs-name link">{{ g.name }}</router-link>
+          <span v-else class="gs-name">{{ g.name }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-grid" style="grid-template-columns:repeat(2,1fr)">
+      <div class="stat"><div class="num" style="font-size:15px">{{ fixture.fixture.venue?.name || '—' }}</div><div class="label">{{ $t('venue') }}</div></div>
+      <div class="stat"><div class="num" style="font-size:15px">{{ fixture.fixture.referee || '—' }}</div><div class="label">{{ $t('referee') }}</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" style="margin-top:18px">
+      <button class="tab" :class="{ active: tab === 'lineup' }" @click="selectTab('lineup')">{{ $t('tab_lineup') }}</button>
+      <button class="tab" :class="{ active: tab === 'timeline' }" @click="selectTab('timeline')">{{ $t('tab_timeline') }}</button>
+      <button class="tab" :class="{ active: tab === 'stats' }" @click="selectTab('stats')">{{ $t('tab_stats') }}</button>
+      <button class="tab" :class="{ active: tab === 'ratings' }" @click="selectTab('ratings')">{{ $t('tab_ratings') }}</button>
+      <button class="tab" :class="{ active: tab === 'h2h' }" @click="selectTab('h2h')">{{ $t('tab_h2h') }}</button>
+    </div>
+
+    <LineupPitch v-if="tab === 'lineup'" :lineups="lineups" />
+    <MatchTimeline v-else-if="tab === 'timeline'" :events="events" :home-team-id="fixture.teams.home.id" />
+    <MatchStats v-else-if="tab === 'stats'" :stats="stats" />
+    <PlayerRatings v-else-if="tab === 'ratings'" :data="ratings" />
+    <H2HList v-else-if="tab === 'h2h'" :matches="h2h" :home-team-id="fixture.teams.home.id" />
+  </div>
+</template>
+
+<style scoped>
+.rank-badge {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.goal-summary {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 4px 0 14px;
+}
+.gs-side { display: flex; flex-direction: column; gap: 4px; }
+.gs-side.right { align-items: flex-end; }
+.gs-ball { font-size: 14px; padding-top: 2px; }
+.gs-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.gs-side.right .gs-item { flex-direction: row; }
+.gs-name { font-weight: 600; }
+.gs-name.link { color: inherit; text-decoration: none; }
+.gs-name.link:hover { color: var(--accent); text-decoration: underline; }
+.gs-min { color: var(--text-dim); font-weight: 700; }
+.gs-tag { color: var(--text-dim); font-size: 11px; }
+</style>
