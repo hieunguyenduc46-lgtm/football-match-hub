@@ -26,6 +26,12 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# Làm sạch khoảng trắng/xuống dòng lẫn trong biến môi trường (vd dán key trên dashboard
+# bị thừa '\n' -> httpx báo "Illegal header value" và MỌI request API thất bại).
+settings.api_football_key = (settings.api_football_key or "").strip()
+settings.api_football_host = (settings.api_football_host or "").strip()
+settings.api_football_via = (settings.api_football_via or "").strip()
+
 # An toàn: chưa có key thì luôn dùng mock, tránh gọi API lỗi 401.
 if not settings.api_football_key:
     settings.use_mock = True
