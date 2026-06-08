@@ -16,6 +16,6 @@ services:
       - key: API_FOOTBALL_VIA
         value: "direct"
       - key: SEASON
-        value: "2025"
+        value: "0"               # 0 = TỰ SUY mùa theo ngày (khỏi sửa mỗi năm). Đặt năm cụ thể để ghim.
       - key: FRONTEND_ORIGIN
         sync: false              # dán URL frontend đã deploy, vd https://...vercel.app

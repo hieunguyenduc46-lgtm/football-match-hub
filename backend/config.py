@@ -2,6 +2,8 @@
 Đọc cấu hình từ file .env (hoặc biến môi trường).
 Logic: nếu không có API key -> tự bật chế độ mock để app vẫn chạy được.
 """
+from datetime import datetime
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +13,8 @@ class Settings(BaseSettings):
     # "direct" = đăng ký dashboard api-sports.io (header x-apisports-key)
     # "rapidapi" = đăng ký qua RapidAPI (header x-rapidapi-key)
     api_football_via: str = "direct"
-    season: int = 2025
+    # 0 = TỰ SUY mùa theo ngày (khỏi cập nhật hằng năm). Đặt >0 (vd 2025) để GHIM cứng 1 mùa.
+    season: int = 0
     use_mock: bool = True
     # CORS: 1 hoặc nhiều origin, cách nhau bằng dấu phẩy (cho lúc deploy)
     frontend_origin: str = "http://localhost:5173"
@@ -37,26 +40,46 @@ if not settings.api_football_key:
     settings.use_mock = True
 
 
-# Mùa của từng giải khác với mùa mặc định. World Cup 2026 nằm ở season 2026,
-# còn các giải VĐQG (mùa 2025/26) dùng season mặc định (2025).
+# ===== Tự suy MÙA theo ngày (khỏi cập nhật hằng năm) =====
+# Mùa giải châu Âu vắt 2 năm (tháng 8 -> tháng 5). Quy ước: tháng >= 7 thuộc mùa NĂM ĐÓ,
+# tháng < 7 thuộc mùa NĂM TRƯỚC. Vd: 06/2026 -> 2025 (mùa 2025/26 vừa xong);
+# 08/2026 -> 2026 (mùa 2026/27 mới). Khớp đúng cách suy season ở endpoint /fixtures.
+def current_season(now=None):
+    now = now or datetime.now()
+    return now.year if now.month >= 7 else now.year - 1
+
+
+def default_season():
+    """Mùa mặc định cho standings / vua phá lưới / hồ sơ cầu thủ.
+    SEASON env > 0 -> GHIM đúng giá trị đó (ghi đè tay khi cần xem mùa cũ).
+    SEASON = 0 (hoặc không đặt) -> TỰ SUY theo ngày, không phải sửa mỗi năm."""
+    return settings.season if settings.season and settings.season > 0 else current_season()
+
+
+# Giải có mùa ĐẶC BIỆT, không theo quy luật mùa-năm thường:
+#  - World Cup (4 năm/lần) -> ghim năm kỳ giải; cập nhật khi có kỳ mới (2030...).
 LEAGUE_SEASON = {
     1: 2026,   # World Cup 2026
-    2: 2025,   # Champions League 2025/26
-    253: 2026, # MLS (chạy theo năm dương lịch)
 }
 
-# Giải chạy theo NĂM DƯƠNG LỊCH (tháng 1–12): season = đúng năm của ngày.
-# Khác với giải châu Âu (tháng 8–5): season = năm trước nếu tháng < 7.
-# Dùng cho việc tự suy season ở endpoint /fixtures.
+# Giải chạy theo NĂM DƯƠNG LỊCH (tháng 1–12): season = đúng năm hiện tại (vd MLS).
 CALENDAR_YEAR_LEAGUES = {253}  # MLS
 
 
 def season_for(league):
-    """Trả season đúng cho 1 giải; không có trong map thì dùng SEASON mặc định."""
+    """Trả season đúng cho 1 giải:
+      - giải đặc biệt (World Cup...) -> theo LEAGUE_SEASON,
+      - giải năm dương lịch (MLS) -> đúng NĂM hiện tại,
+      - còn lại -> mùa mặc định (tự suy theo ngày, trừ khi SEASON env ghim cứng)."""
     try:
-        return LEAGUE_SEASON.get(int(league), settings.season)
+        lid = int(league)
     except (TypeError, ValueError):
-        return settings.season
+        return default_season()
+    if lid in LEAGUE_SEASON:
+        return LEAGUE_SEASON[lid]
+    if lid in CALENDAR_YEAR_LEAGUES:
+        return datetime.now().year
+    return default_season()
 
 
 # ===== Mốc bàn thắng OFFICIAL (nhập tay) =====

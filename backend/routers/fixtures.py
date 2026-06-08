@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter
 
 import api_football
-from config import settings, CALENDAR_YEAR_LEAGUES
+from config import CALENDAR_YEAR_LEAGUES, default_season
 
 router = APIRouter(prefix="/api", tags=["fixtures"])
 
@@ -28,9 +28,9 @@ async def list_fixtures(date: Optional[str] = None, league: Optional[int] = None
                 else:
                     season = y if m >= 7 else y - 1  # giải châu Âu: mùa vắt 2 năm
             else:
-                season = settings.season
+                season = default_season()
         except (TypeError, ValueError):
-            season = settings.season
+            season = default_season()
     return {"response": await api_football.get_fixtures(date, league, season, tz)}
 
 

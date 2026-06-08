@@ -4,7 +4,6 @@ from fastapi import APIRouter
 
 import api_football
 import config
-from config import settings
 
 router = APIRouter(prefix="/api", tags=["players"])
 
@@ -19,7 +18,7 @@ async def topscorers(league: int = 39, season: Optional[int] = None):
 @router.get("/players/{player_id}")
 async def player_detail(player_id: int, season: Optional[int] = None):
     """Chi tiết cầu thủ: ảnh mặt + thống kê (bàn thắng, kiến tạo, số trận...)."""
-    return {"response": await api_football.get_player(player_id, season or settings.season)}
+    return {"response": await api_football.get_player(player_id, season or config.default_season())}
 
 
 @router.get("/players/{player_id}/career")
@@ -34,14 +33,14 @@ async def player_motm(player_id: int, season: Optional[int] = None):
     """Số lần 'Cầu thủ hay nhất trận' (rating cao nhất) trong MÙA đang xem.
     API-Football không có sẵn -> tự tính bằng cách quét fixtures. Tải riêng (lazy)
     vì tốn nhiều request; kết quả được cache 6h ở tầng api_football."""
-    return await api_football.get_player_motm(player_id, season or settings.season)
+    return await api_football.get_player_motm(player_id, season or config.default_season())
 
 
 @router.get("/_debug/player/{player_id}")
 async def debug_player(player_id: int, season: Optional[int] = None):
     """Debug: liệt kê MỌI mục statistics (đội / giải / bàn / số trận) qua 3 mùa,
     để soi vì sao thiếu số liệu ĐTQG. Mở: /api/_debug/player/<id>"""
-    base = season or settings.season
+    base = season or config.default_season()
     out = {}
     for s in (base, base + 1, base - 1):
         try:
