@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
 import MatchCard from '../components/MatchCard.vue'
 import { imgFallback } from '../utils/format'
+import { teamName } from '../utils/countryNames'
 
 const route = useRoute()
 const data = ref(null)      // { mode, teamA, teamB, team, recent, upcoming, notFound }
@@ -25,22 +26,32 @@ async function load() {
   }
 }
 
-// Đổi từ khoá trên URL (?q=...) -> tải lại. immediate để vào trang là chạy luôn.
-// (Đã bỏ onMounted(load) vì immediate:true đã tự gọi 1 lần lúc mount -> tránh gọi API 2 lần.)
-watch(() => route.query.q, load, { immediate: true })
+// keep-alive: component bị cache, KHÔNG remount. Chỉ tải lại khi đây đúng là trang đang
+// xem (route.name === 'matches') VÀ từ khoá khác lần tải trước -> tránh xoá/tải lại kết quả
+// (mất vị trí cuộn) khi rời trang rồi back lại.
+let loadedQ = null
+function syncSearch() {
+  if (route.name !== 'matches') return
+  const q = (route.query.q || '').toString().trim()
+  if (q === loadedQ) return
+  loadedQ = q
+  load()
+}
+onMounted(syncSearch)
+watch(() => route.query.q, syncSearch)
 </script>
 
 <template>
-  <router-link to="/" class="back">{{ $t('backHome') }}</router-link>
+  <a href="#" class="back" @click.prevent="$router.back()">{{ $t('backHome') }}</a>
 
   <!-- Tiêu đề: A vs B hoặc 1 đội -->
   <div v-if="data && data.mode === 'h2h' && data.teamA && data.teamB" class="ms-head">
-    <span class="ms-team"><img :src="data.teamA.logo" @error="imgFallback" />{{ data.teamA.name }}</span>
+    <span class="ms-team"><img :src="data.teamA.logo" @error="imgFallback" />{{ teamName(data.teamA.name) }}</span>
     <span class="ms-vs">vs</span>
-    <span class="ms-team"><img :src="data.teamB.logo" @error="imgFallback" />{{ data.teamB.name }}</span>
+    <span class="ms-team"><img :src="data.teamB.logo" @error="imgFallback" />{{ teamName(data.teamB.name) }}</span>
   </div>
   <div v-else-if="data && data.mode === 'team' && data.team" class="ms-head">
-    <span class="ms-team"><img :src="data.team.logo" @error="imgFallback" />{{ data.team.name }}</span>
+    <span class="ms-team"><img :src="data.team.logo" @error="imgFallback" />{{ teamName(data.team.name) }}</span>
   </div>
   <h1 v-else class="page-title">{{ $t('matchesFor') }}</h1>
 

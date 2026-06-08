@@ -5,6 +5,10 @@ import TheHeader from './components/TheHeader.vue'
 <template>
   <TheHeader />
   <main class="container">
-    <router-view />
+    <router-view v-slot="{ Component }">
+      <keep-alive>
+        <component :is="Component" />
+      </keep-alive>
+    </router-view>
   </main>
 </template>

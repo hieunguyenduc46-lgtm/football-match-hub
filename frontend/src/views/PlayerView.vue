@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
 import { imgFallback } from '../utils/format'
+import { splitStats, totalsOf } from '../utils/playerStats'
 import FavButton from '../components/FavButton.vue'
 
 const route = useRoute()
@@ -16,101 +17,10 @@ const player = computed(() => data.value?.player || null)
 // ===== Tách thống kê CLB vs ĐTQG, KHÔNG gộp — hiển thị theo TỪNG GIẢI =====
 // API-Football trả `statistics` = mảng, mỗi ĐỘI + mỗi GIẢI một phần tử
 // (vd Al-Nassr / Saudi Pro League, Al-Nassr / AFC Champions League Two,
-//  Portugal / Nations League...). Ta giữ nguyên từng phần tử = từng giải.
+//  Portugal / Nations League...). Logic phân loại + gộp dùng CHUNG với trang
+// so sánh ở utils/playerStats.js để hai trang không bao giờ lệch số liệu.
 
-// Bỏ dấu, thường hoá để so tên đội với quốc tịch ("Pháp"/"France"...).
-function norm(s) {
-  return (s || '').toLowerCase().normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '')
-}
-
-// Giải cấp ĐỘI TUYỂN (để bắt cả khi tên đội != quốc tịch, vd "Korea Republic").
-// LƯU Ý: dùng \beuro(?!pa) để KHÔNG dính "Europa League" (cúp CLB).
-const INTL_LEAGUE = /world cup|nations league|friendl|\beuro(?!pa)|copa am|africa cup|afcon|asian cup|gold cup|olympic|qualification|qualifying|confederations cup/i
-
-// Giải cấp CLB (cúp châu lục + cúp QG) — KHÔNG bao giờ là ĐTQG, dù tên có
-// "champions"/"concacaf"... (vd "CONCACAF Champions League", "UEFA Europa League",
-// "CONMEBOL Libertadores" đều là CLB). Đây là nguồn gây nhầm lẫn chính.
-const CLUB_LEAGUE = /club world cup|champions league|champions cup|europa|conference league|libertadores|sudamericana|recopa|leagues cup|super cup|intercontinental|fa cup|copa del rey|coppa|dfb|carabao|community shield|supercopa|supercoppa/i
-
-function isNational(s, nationality) {
-  const team = s.team?.name || ''
-  const league = s.league?.name || ''
-  // Cúp CLB (gồm "FIFA Club World Cup", "Club Friendlies", cúp châu lục CLB...) -> KHÔNG phải ĐTQG.
-  if (/club/i.test(league) || CLUB_LEAGUE.test(league)) return false
-  // Tin cậy nhất: tên đội trùng quốc tịch cầu thủ ("France", "Argentina").
-  if (nationality && norm(team) === norm(nationality)) return true
-  // Dự phòng: tên giải thuộc nhóm đội tuyển (bắt cả khi tên đội khác quốc tịch).
-  return INTL_LEAGUE.test(league)
-}
-
-// Giao hữu (không tính vào thống kê "chính thức").
-function isFriendly(s) {
-  return /friendl/i.test(s.league?.name || '')
-}
-
-// Chuẩn hoá % chuyền chính xác từ field `passes.accuracy`.
-// API-Football: ở endpoint /players (gộp cả mùa) field này đôi khi là phần trăm
-// (<=100), đôi khi là TỔNG CỘNG phần trăm các trận (>100) -> chia cho số trận.
-function passPct(acc, apps) {
-  if (acc == null || acc === '') return null
-  const n = parseFloat(acc)
-  if (isNaN(n)) return null
-  return n <= 100 ? Math.round(n) : Math.round(n / Math.max(apps, 1))
-}
-
-// Chuẩn hoá 1 phần tử statistics -> 1 dòng giải đấu.
-function mapEntry(s) {
-  const r = parseFloat(s.games?.rating)
-  const apps = s.games?.appearences || 0
-  return {
-    key: `${s.team?.id || ''}-${s.league?.id || s.league?.name || ''}`,
-    league: s.league?.name || '—',
-    logo: s.league?.logo,
-    team: s.team?.name || '',
-    goals: s.goals?.total || 0,
-    assists: s.goals?.assists || 0,
-    apps,
-    minutes: s.games?.minutes || 0,
-    shots: s.shots?.total || 0,
-    passAcc: passPct(s.passes?.accuracy, apps),
-    yellow: s.cards?.yellow || 0,
-    red: s.cards?.red || 0,
-    rating: r ? +r.toFixed(1) : null,
-    position: s.games?.position,
-  }
-}
-
-// Cộng dồn các dòng -> dòng TỔNG (rating: trung bình có trọng số theo số trận).
-function totalsOf(rows) {
-  const sum = (k) => rows.reduce((t, r) => t + (r[k] || 0), 0)
-  let rW = 0, rA = 0   // rating: trung bình có trọng số theo số trận
-  let pW = 0, pA = 0   // pass%: trung bình có trọng số theo số trận
-  for (const r of rows) {
-    if (r.rating && r.apps) { rW += r.rating * r.apps; rA += r.apps }
-    if (r.passAcc != null && r.apps) { pW += r.passAcc * r.apps; pA += r.apps }
-  }
-  return {
-    goals: sum('goals'), assists: sum('assists'), apps: sum('apps'),
-    minutes: sum('minutes'), shots: sum('shots'),
-    yellow: sum('yellow'), red: sum('red'),
-    passAcc: pA ? Math.round(pW / pA) : null,
-    rating: rA ? +(rW / rA).toFixed(1) : null,
-  }
-}
-
-const split = computed(() => {
-  const arr = data.value?.statistics || []
-  const nat = player.value?.nationality
-  const club = [], national = []
-  for (const s of arr) {
-    if (isFriendly(s)) continue            // bỏ trận giao hữu khỏi mọi bảng
-    ;(isNational(s, nat) ? national : club).push(mapEntry(s))
-  }
-  // Sắp xếp giải nhiều trận lên trước cho dễ nhìn.
-  const byApps = (a, b) => b.apps - a.apps
-  return { club: club.sort(byApps), national: national.sort(byApps) }
-})
+const split = computed(() => splitStats(data.value))
 
 const clubRows = computed(() => split.value.club)
 const nationalRows = computed(() => split.value.national)
@@ -155,26 +65,36 @@ async function loadPlayer(id) {
     if (seq === loadSeq) loading.value = false
   }
   // Tổng bàn sự nghiệp: gọi sau, không chặn trang (backend phải quét nhiều mùa).
+  // timeout dài hơn mặc định vì cold-cache có thể quét nhiều mùa.
   try {
-    const c = await api.get(`/players/${id}/career`)
+    const c = await api.get(`/players/${id}/career`, { timeout: 60000 })
     if (seq === loadSeq) career.value = c.data
   } catch (e) { /* bỏ qua */ }
-  // POTM mùa này: backend quét fixtures -> chậm, tải sau cùng, không chặn trang.
+  // POTM mùa này: backend quét ~50 trận -> cold-cache có thể >15s. Cho timeout 60s để
+  // không bị huỷ giữa chừng (lần sau đã cache nên rất nhanh).
   try {
-    const m = await api.get(`/players/${id}/motm`)
+    const m = await api.get(`/players/${id}/motm`, { timeout: 60000 })
     if (seq === loadSeq) motm.value = m.data
   } catch (e) { /* bỏ qua */ }
 }
 
-onMounted(() => loadPlayer(route.params.id))
-
-// QUAN TRỌNG: khi chuyển từ cầu thủ này sang cầu thủ khác, Vue Router TÁI SỬ DỤNG
-// component (chỉ đổi :id), nên onMounted KHÔNG chạy lại. Phải watch id để tải lại.
-watch(() => route.params.id, (id) => { if (id) loadPlayer(id) })
+// keep-alive: component bị cache, KHÔNG remount khi đổi cầu thủ. Chỉ tải lại khi đây đúng
+// là trang đang xem (route.name === 'player') VÀ là cầu thủ khác cầu thủ đã tải -> tránh
+// tải nhầm khi bị cache, và tránh tải lại (mất vị trí cuộn) khi back về đúng cầu thủ cũ.
+let loadedId = null
+function syncPlayer() {
+  if (route.name !== 'player') return
+  const id = route.params.id
+  if (!id || id === loadedId) return
+  loadedId = id
+  loadPlayer(id)
+}
+onMounted(syncPlayer)
+watch(() => route.params.id, syncPlayer)
 </script>
 
 <template>
-  <router-link to="/" class="back">{{ $t('backHome') }}</router-link>
+  <a href="#" class="back" @click.prevent="$router.back()">{{ $t('backHome') }}</a>
 
   <div v-if="loading" class="skeleton" style="height:120px"></div>
   <div v-else-if="!player" class="center">{{ $t('playerNoData') }}</div>
@@ -243,9 +163,9 @@ watch(() => route.params.id, (id) => { if (id) loadPlayer(id) })
               <td>{{ r.apps }}</td>
               <td>{{ r.goals }}</td>
               <td>{{ r.assists }}</td>
-              <td>{{ r.shots }}</td>
+              <td>{{ r.shots != null ? r.shots : '—' }}</td>
               <td>{{ r.passAcc != null ? r.passAcc + '%' : '—' }}</td>
-              <td>{{ r.minutes }}</td>
+              <td>{{ r.minutes != null ? r.minutes : '—' }}</td>
               <td>{{ r.yellow }}</td>
               <td>{{ r.red }}</td>
               <td>{{ r.rating != null ? r.rating.toFixed(1) : '—' }}</td>
@@ -297,9 +217,9 @@ watch(() => route.params.id, (id) => { if (id) loadPlayer(id) })
               <td>{{ r.apps }}</td>
               <td>{{ r.goals }}</td>
               <td>{{ r.assists }}</td>
-              <td>{{ r.shots }}</td>
+              <td>{{ r.shots != null ? r.shots : '—' }}</td>
               <td>{{ r.passAcc != null ? r.passAcc + '%' : '—' }}</td>
-              <td>{{ r.minutes }}</td>
+              <td>{{ r.minutes != null ? r.minutes : '—' }}</td>
               <td>{{ r.yellow }}</td>
               <td>{{ r.red }}</td>
               <td>{{ r.rating != null ? r.rating.toFixed(1) : '—' }}</td>

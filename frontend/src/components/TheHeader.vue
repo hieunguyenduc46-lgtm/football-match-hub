@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import api from '../services/api'
 import { imgFallback } from '../utils/format'
 import { state, setLocale } from '../i18n'
+import { teamName } from '../utils/countryNames'
 
 const router = useRouter()
 
@@ -137,7 +138,7 @@ function toggleTheme() {
           <template v-if="results.teams.length">
             <div class="dd-label">{{ $t('teamsLabel') }}</div>
             <div v-for="t in results.teams" :key="'t' + t.id" class="dd-item" @pointerdown.prevent="goTeam(t.id)">
-              <img :src="t.logo" @error="imgFallback" /> {{ t.name }}
+              <img :src="t.logo" @error="imgFallback" /> {{ teamName(t.name) }}
             </div>
           </template>
           <template v-if="results.players.length">

@@ -82,4 +82,10 @@ CAREER_BASELINE = {
     # Real 62; Pháp 55). Sau đó đá nốt mùa 25/26 (riêng La Liga ~25 bàn) -> ước ~430 tính tới ~06/2026.
     # Nguồn: ESPN/SI/Tribuna (mốc 400). *Số hiện tại là ước lượng, chỉnh tay 1 số nếu muốn chính xác hơn.
     278: {"goals": 430, "through": 2026},
+    # Erling Haaland (id 1100) — 372 bàn official (CLB 317: Bryne/Molde/Salzburg/Dortmund/
+    # Man City + Na Uy 55), tính ~06/2026. Nguồn: Wikipedia. API-Football tự cộng chỉ ra 342
+    # do thiếu dữ liệu các mùa đầu sự nghiệp (Bryne/Molde/Salzburg 2016–2019) -> neo tay cho chuẩn.
+    # `through` đặt cao (2026) để KHÔNG cộng thêm mùa nào -> hiển thị đúng 372; ghi thêm bàn thì
+    # tăng số này lên (cập nhật vài tháng/lần), giống cách làm với Messi/Neymar.
+    1100: {"goals": 372, "through": 2026},
 }

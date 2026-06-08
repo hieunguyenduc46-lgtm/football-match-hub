@@ -1,7 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { imgFallback } from '../utils/format'
+import { imgFallback, playerPhoto } from '../utils/format'
+import { teamName } from '../utils/countryNames'
 
 // Nhận mảng lineups (2 đội) đúng shape API-Football.
 const props = defineProps({ lineups: { type: Array, required: true } })
@@ -63,21 +64,21 @@ function goPlayer(id) {
       <div class="pitch__box pitch__box--bottom"></div>
 
       <div class="pitch__label pitch__label--top" v-if="away">
-        <img :src="away.team?.logo" @error="imgFallback" /> {{ away.team?.name }}<span v-if="away.formation"> · {{ away.formation }}</span>
+        <img :src="away.team?.logo" @error="imgFallback" /> {{ teamName(away.team?.name) }}<span v-if="away.formation"> · {{ away.formation }}</span>
       </div>
       <div class="pitch__label pitch__label--bottom" v-if="home">
-        {{ home.team?.name }}<span v-if="home.formation"> · {{ home.formation }}</span> <img :src="home.team?.logo" @error="imgFallback" />
+        {{ teamName(home.team?.name) }}<span v-if="home.formation"> · {{ home.formation }}</span> <img :src="home.team?.logo" @error="imgFallback" />
       </div>
 
       <!-- cầu thủ khách (trên) -->
       <div v-for="p in awayPlayers" :key="'a' + p.id" class="pp" :style="{ left: p.x + '%', top: p.y + '%' }" @click="goPlayer(p.id)">
-        <img :src="p.photo" @error="imgFallback" />
+        <img :src="playerPhoto(p)" @error="imgFallback" />
         <span class="num">{{ p.number }}</span>
         <span class="nm">{{ p.name }}</span>
       </div>
       <!-- cầu thủ nhà (dưới) -->
       <div v-for="p in homePlayers" :key="'h' + p.id" class="pp" :style="{ left: p.x + '%', top: p.y + '%' }" @click="goPlayer(p.id)">
-        <img :src="p.photo" @error="imgFallback" />
+        <img :src="playerPhoto(p)" @error="imgFallback" />
         <span class="num">{{ p.number }}</span>
         <span class="nm">{{ p.name }}</span>
       </div>

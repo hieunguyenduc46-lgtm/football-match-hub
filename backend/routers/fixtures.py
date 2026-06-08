@@ -18,15 +18,32 @@ async def list_fixtures(date: Optional[str] = None, league: Optional[int] = None
     tz = múi giờ người xem -> API trả ngày & giờ theo đúng giờ địa phương của họ.
     """
     if league and not season:
-        if date and len(date) >= 7:
-            y, m = int(date[:4]), int(date[5:7])
-            if league in CALENDAR_YEAR_LEAGUES:
-                season = y                       # giải năm dương lịch: dùng đúng năm
+        # Suy season từ ngày; date sai định dạng (vd "abc") thì rơi về season mặc định
+        # thay vì ném ValueError -> tránh trả 500 cho người gọi.
+        try:
+            if date and len(date) >= 7:
+                y, m = int(date[:4]), int(date[5:7])
+                if league in CALENDAR_YEAR_LEAGUES:
+                    season = y                       # giải năm dương lịch: dùng đúng năm
+                else:
+                    season = y if m >= 7 else y - 1  # giải châu Âu: mùa vắt 2 năm
             else:
-                season = y if m >= 7 else y - 1  # giải châu Âu: mùa vắt 2 năm
-        else:
+                season = settings.season
+        except (TypeError, ValueError):
             season = settings.season
     return {"response": await api_football.get_fixtures(date, league, season, tz)}
+
+
+@router.get("/leagues/{league_id}/fixtures")
+async def league_fixtures(league_id: int):
+    """Trận gần đây (kết quả) + sắp tới của 1 giải. Cho tab 'Lịch đấu' ở trang giải."""
+    return await api_football.get_league_fixtures(league_id)
+
+
+@router.get("/country/{name}/fixtures")
+async def country_fixtures(name: str):
+    """Trận gần đây + sắp tới của đội tuyển quốc gia (chấp nhận tên tiếng Việt)."""
+    return await api_football.get_country_fixtures(name)
 
 
 @router.get("/_debug/fixtures")

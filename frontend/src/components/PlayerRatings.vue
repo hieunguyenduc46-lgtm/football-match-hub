@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { teamName } from '../utils/countryNames'
 
 const props = defineProps({ data: { type: Array, required: true } })
 const router = useRouter()
@@ -14,12 +15,13 @@ function goalsOf(p) {
   return p?.statistics?.[0]?.goals?.total || 0
 }
 
-// MOTM = điểm cao nhất toàn trận.
+// MOTM = điểm cao nhất toàn trận. Chỉ tính khi có rating thật (>0); nếu cả trận chưa
+// chấm điểm thì KHÔNG gán MOTM (tránh badge nhầm vào cầu thủ đầu danh sách).
 const motmId = computed(() => {
   let best = null
   for (const t of props.data) {
     for (const p of (t.players || [])) {
-      if (!best || rating(p) > rating(best)) best = p
+      if (rating(p) > 0 && (!best || rating(p) > rating(best))) best = p
     }
   }
   return best ? best.player?.id : null
@@ -40,7 +42,7 @@ function goPlayer(id) {
 <template>
   <div v-if="data.length" class="ratings">
     <div v-for="t in data" :key="t.team?.id" class="rt-col">
-      <div class="rt-team">{{ t.team?.name }}</div>
+      <div class="rt-team">{{ teamName(t.team?.name) }}</div>
       <div
         v-for="p in (t.players || [])"
         :key="p.player?.id"

@@ -5,7 +5,7 @@ const props = defineProps({
 })
 
 function isHome(e) {
-  return e.team.id === props.homeTeamId
+  return e?.team?.id === props.homeTeamId
 }
 
 // Icon theo loại sự kiện.
@@ -23,18 +23,18 @@ function icon(e) {
       <div class="tl-cell left">
         <template v-if="isHome(e)">
           <span class="info">
-            <span class="nm">{{ e.player.name }}</span>
+            <span class="nm">{{ e.player?.name || '—' }}</span>
             <span class="sub" v-if="e.assist && e.assist.name">{{ e.assist.name }}</span>
           </span>
           <span class="ic">{{ icon(e) }}</span>
         </template>
       </div>
-      <div class="tl-min">{{ e.time.elapsed }}'</div>
+      <div class="tl-min">{{ e.time?.elapsed ?? '' }}'</div>
       <div class="tl-cell right">
         <template v-if="!isHome(e)">
           <span class="ic">{{ icon(e) }}</span>
           <span class="info">
-            <span class="nm">{{ e.player.name }}</span>
+            <span class="nm">{{ e.player?.name || '—' }}</span>
             <span class="sub" v-if="e.assist && e.assist.name">{{ e.assist.name }}</span>
           </span>
         </template>

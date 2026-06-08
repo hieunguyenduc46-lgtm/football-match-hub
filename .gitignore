@@ -13,3 +13,6 @@ frontend/.env
 # Editor / OS
 .DS_Store
 .vscode/
+
+# Vite temp config files
+frontend/vite.config.js.timestamp-*

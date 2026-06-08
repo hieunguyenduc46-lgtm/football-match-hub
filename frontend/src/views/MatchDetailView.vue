@@ -1,13 +1,14 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
-import { isLive, isFinished, matchTime, matchDay, imgFallback } from '../utils/format'
+import { isFinished, isLiveFixture, isStaleLive, matchTime, matchDay, imgFallback } from '../utils/format'
 import LineupPitch from '../components/LineupPitch.vue'
 import MatchTimeline from '../components/MatchTimeline.vue'
 import MatchStats from '../components/MatchStats.vue'
 import PlayerRatings from '../components/PlayerRatings.vue'
 import H2HList from '../components/H2HList.vue'
+import { teamName } from '../utils/countryNames'
 
 const route = useRoute()
 let id = route.params.id   // đổi trận sẽ gán lại (xem watch ở dưới)
@@ -38,8 +39,11 @@ const goalSummary = computed(() => {
   const homeId = fixture.value.teams.home.id
   for (const e of events.value) {
     if (e.type !== 'Goal' || e.detail === 'Missed Penalty') continue
+    // Bỏ qua loạt sút luân lưu (penalty shootout): mỗi quả là 1 event Goal nhưng KHÔNG
+    // tính vào tỉ số chính -> nếu cộng sẽ làm sai số bàn ở tóm tắt.
+    if (e.comments === 'Penalty Shootout') continue
     const og = e.detail === 'Own Goal'
-    const scoredByHome = e.team.id === homeId
+    const scoredByHome = e.team?.id === homeId
     const side = og ? (scoredByHome ? 'away' : 'home') : (scoredByHome ? 'home' : 'away')
     out[side].push({
       id: e.player?.id || null,
@@ -98,20 +102,43 @@ async function loadMatch() {
   }
 
   // Trận đang đá -> cập nhật mỗi 15s (nhịp làm tươi của API), chỉ khi tab đang mở.
+  startTimer()
+}
+
+// Tách riêng để onActivated (quay lại trang đã cache) cũng bật lại được polling.
+function startTimer() {
+  clearInterval(timer)
   timer = setInterval(() => {
-    if (!document.hidden && fixture.value && isLive(fixture.value.fixture.status.short)) refresh()
+    // Chỉ poll khi trận ĐANG ĐÁ THẬT (bỏ 'live treo' để không gọi API mãi cho trận đã chết).
+    if (!document.hidden && fixture.value && isLiveFixture(fixture.value)) refresh()
   }, 15000)
 }
 
-onMounted(loadMatch)
-// Đổi trận mà không remount -> gán lại id, tải lại.
-watch(() => route.params.id, (newId) => { if (newId) { id = newId; loadMatch() } })
+// keep-alive: component KHÔNG remount khi đổi trận/back. Chỉ tải lại khi đây thực sự là
+// trang đang xem (route.name === 'match') VÀ là trận khác trận đã tải -> tránh:
+//  (1) tải nhầm khi đang ở trang khác mà component vẫn bị cache,
+//  (2) tải lại (mất vị trí cuộn) khi back về đúng trận cũ.
+let loadedId = null
+function syncMatch() {
+  if (route.name !== 'match') return
+  const newId = route.params.id
+  if (!newId || newId === loadedId) return
+  loadedId = newId
+  id = newId
+  loadMatch()
+}
+onMounted(syncMatch)
+watch(() => route.params.id, syncMatch)
+onActivated(() => { if (fixture.value) startTimer() })   // quay lại -> bật lại polling nếu cần
+onDeactivated(() => clearInterval(timer))                // rời trang (vẫn bị cache) -> dừng polling
 
 async function refresh() {
+  const seq = loadSeq                              // chốt seq lúc gọi
   const [fRes, eRes] = await Promise.allSettled([
     api.get(`/fixtures/${id}`),
     api.get(`/fixtures/${id}/events`),
   ])
+  if (seq !== loadSeq) return                      // đã chuyển sang trận khác -> bỏ kết quả cũ
   if (fRes.status === 'fulfilled') fixture.value = fRes.value.data.response?.[0] || fixture.value
   if (eRes.status === 'fulfilled') events.value = eRes.value.data.response || events.value
 }
@@ -143,7 +170,7 @@ onUnmounted(() => clearInterval(timer))
 </script>
 
 <template>
-  <router-link to="/" class="back">{{ $t('backHome') }}</router-link>
+  <a href="#" class="back" @click.prevent="$router.back()">{{ $t('backHome') }}</a>
 
   <div v-if="loading" class="skeleton" style="height:120px"></div>
   <div v-else-if="error" class="error-box">{{ error }}</div>
@@ -157,7 +184,7 @@ onUnmounted(() => clearInterval(timer))
     <div style="display:flex; align-items:center; justify-content:space-around; padding:18px 0;">
       <router-link :to="{ name: 'team', params: { id: fixture.teams.home.id } }" style="text-align:center; width:38%;">
         <img :src="fixture.teams.home.logo" @error="imgFallback" style="width:56px;height:56px;object-fit:contain" />
-        <div style="margin-top:8px;font-weight:600">{{ fixture.teams.home.name }}</div>
+        <div style="margin-top:8px;font-weight:600">{{ teamName(fixture.teams.home.name) }}</div>
         <div v-if="homeRank" class="rank-badge">#{{ homeRank }}</div>
       </router-link>
 
@@ -167,15 +194,15 @@ onUnmounted(() => clearInterval(timer))
         </div>
         <div style="font-size:20px;font-weight:700" v-else>vs</div>
         <div class="muted" style="margin-top:4px;font-size:13px">
-          <span v-if="isLive(fixture.fixture.status.short)" style="color:var(--live)">● {{ fixture.fixture.status.elapsed }}'</span>
-          <span v-else-if="isFinished(fixture.fixture.status.short)">{{ $t('finished') }}</span>
+          <span v-if="isLiveFixture(fixture)" style="color:var(--live)">● {{ fixture.fixture.status.elapsed }}'</span>
+          <span v-else-if="isFinished(fixture.fixture.status.short) || isStaleLive(fixture)">{{ $t('finished') }}</span>
           <span v-else>{{ $t('notStarted') }}</span>
         </div>
       </div>
 
       <router-link :to="{ name: 'team', params: { id: fixture.teams.away.id } }" style="text-align:center; width:38%;">
         <img :src="fixture.teams.away.logo" @error="imgFallback" style="width:56px;height:56px;object-fit:contain" />
-        <div style="margin-top:8px;font-weight:600">{{ fixture.teams.away.name }}</div>
+        <div style="margin-top:8px;font-weight:600">{{ teamName(fixture.teams.away.name) }}</div>
         <div v-if="awayRank" class="rank-badge">#{{ awayRank }}</div>
       </router-link>
     </div>

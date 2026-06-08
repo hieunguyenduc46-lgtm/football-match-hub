@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '../services/api'
 import { imgFallback, matchDay, matchTime } from '../utils/format'
 import FavButton from '../components/FavButton.vue'
+import { teamName } from '../utils/countryNames'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,15 +44,25 @@ async function loadTeam(id) {
   loading.value = false
 }
 
-onMounted(() => loadTeam(teamId.value))
-// Đổi đội mà không remount -> phải watch để tải lại.
-watch(() => route.params.id, (id) => { if (id) loadTeam(Number(id)) })
+// keep-alive: component bị cache, KHÔNG remount. Chỉ tải lại khi đây đúng là trang đang
+// xem (route.name === 'team') VÀ là đội khác đội đã tải -> tránh tải nhầm khi bị cache,
+// và tránh tải lại (mất vị trí cuộn) khi back về đúng đội cũ.
+let loadedId = null
+function syncTeam() {
+  if (route.name !== 'team') return
+  const id = Number(route.params.id)
+  if (!id || id === loadedId) return
+  loadedId = id
+  loadTeam(id)
+}
+onMounted(syncTeam)
+watch(() => route.params.id, syncTeam)
 
 function goMatch(id) { router.push({ name: 'match', params: { id } }) }
 </script>
 
 <template>
-  <router-link to="/" class="back">{{ $t('backHome') }}</router-link>
+  <a href="#" class="back" @click.prevent="$router.back()">{{ $t('backHome') }}</a>
 
   <div v-if="loading" class="skeleton" style="height:100px"></div>
   <div v-else-if="!team" class="center">{{ $t('teamNoData') }}</div>
@@ -60,7 +71,7 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
     <div class="player-hero">
       <img :src="team.team.logo" class="photo" style="border-radius:12px" @error="imgFallback" />
       <div>
-        <h1>{{ team.team.name }}</h1>
+        <h1>{{ teamName(team.team.name) }}</h1>
         <div class="meta">{{ team.venue?.name }} · {{ team.venue?.capacity?.toLocaleString() }} {{ $t('seats') }} · {{ $t('since') }} {{ team.team.founded }}</div>
         <div style="margin-top:8px">
           <FavButton type="team" :item="{ id: team.team.id, name: team.team.name, logo: team.team.logo }" />
@@ -85,7 +96,7 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
         @click="goMatch(m.fixture.id)"
       >
         <span class="muted" style="font-size:12px">{{ matchDay(m.fixture.date) }}</span>
-        <span style="font-size:14px">{{ m.teams.home.name }} v {{ m.teams.away.name }}</span>
+        <span style="font-size:14px">{{ teamName(m.teams.home.name) }} v {{ teamName(m.teams.away.name) }}</span>
         <span class="muted" style="font-size:13px">{{ matchTime(m.fixture.date) }}</span>
       </div>
     </template>
@@ -101,7 +112,7 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
         @click="goMatch(m.fixture.id)"
       >
         <span class="muted" style="font-size:12px">{{ matchDay(m.fixture.date) }}</span>
-        <span style="font-size:14px">{{ m.teams.home.name }} v {{ m.teams.away.name }}</span>
+        <span style="font-size:14px">{{ teamName(m.teams.home.name) }} v {{ teamName(m.teams.away.name) }}</span>
         <strong>{{ m.goals.home }}-{{ m.goals.away }}</strong>
       </div>
     </template>

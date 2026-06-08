@@ -8,7 +8,7 @@ const { teams, players } = storeToRefs(fav)
 </script>
 
 <template>
-  <router-link to="/" class="back">{{ $t('backHome') }}</router-link>
+  <a href="#" class="back" @click.prevent="$router.back()">{{ $t('backHome') }}</a>
   <h1 class="page-title">{{ $t('following') }}</h1>
 
   <div v-if="teams.length === 0 && players.length === 0" class="center">

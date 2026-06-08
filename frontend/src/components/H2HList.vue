@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { matchDay, imgFallback } from '../utils/format'
+import { teamName } from '../utils/countryNames'
 
 const props = defineProps({
   matches: { type: Array, required: true },
@@ -33,11 +34,11 @@ const summary = computed(() => {
     <div v-for="m in matches" :key="m.fixture.id" class="h2h-row">
       <span class="dt">{{ matchDay(m.fixture.date) }}</span>
       <span class="side">
-        <img :src="m.teams.home.logo" @error="imgFallback" />{{ m.teams.home.name }}
+        <img :src="m.teams.home.logo" @error="imgFallback" />{{ teamName(m.teams.home.name) }}
       </span>
       <span class="sc">{{ m.goals.home }} - {{ m.goals.away }}</span>
       <span class="side right">
-        {{ m.teams.away.name }}<img :src="m.teams.away.logo" @error="imgFallback" />
+        {{ teamName(m.teams.away.name) }}<img :src="m.teams.away.logo" @error="imgFallback" />
       </span>
     </div>
   </div>

@@ -34,3 +34,9 @@ async def debug_players(search: str = ""):
 def leagues():
     """Danh sách giải để đổ vào bộ lọc."""
     return {"response": mock_data.CURATED_LEAGUES}
+
+
+@router.get("/leagues/all")
+async def leagues_all():
+    """Danh sách MỌI giải (rút gọn, cache 24h) cho ô tìm kiếm giải/quốc gia ở client."""
+    return {"response": await api_football.get_all_leagues()}

@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import api from '../services/api'
 import { imgFallback } from '../utils/format'
+import { aggregateOfficial } from '../utils/playerStats'
 
 const qa = ref(''), resa = ref([]), pa = ref(null)
 const qb = ref(''), resb = ref([]), pb = ref(null)
@@ -33,45 +34,38 @@ async function pick(side, id) {
   } catch (e) { /* bỏ qua */ }
 }
 
-// Cộng dồn mọi giải trong `statistics` (mảng theo từng giải) -> tổng cả mùa.
-// Không lấy statistics[0] vì phần tử đầu hay là giải đá 0 trận => mọi số =0.
-function aggregate(p) {
-  const arr = p?.statistics || []
-  if (!arr.length) return null
-  const sum = (fn) => arr.reduce((t, s) => t + (fn(s) || 0), 0)
-  let rW = 0, rA = 0
-  for (const s of arr) {
-    const r = parseFloat(s.games?.rating), a = s.games?.appearences || 0
-    if (r && a) { rW += r * a; rA += a }
-  }
-  return {
-    goals: sum(s => s.goals?.total),
-    assists: sum(s => s.goals?.assists),
-    apps: sum(s => s.games?.appearences),
-    minutes: sum(s => s.games?.minutes),
-    yellow: sum(s => s.cards?.yellow),
-    rating: rA ? +(rW / rA).toFixed(2) : 0,
-  }
-}
-
+// Gộp số liệu giống HỆT trang hồ sơ: tổng CHÍNH THỨC = CLB + ĐTQG, loại giao hữu.
+// (Trước đây tự cộng mọi phần tử statistics kể cả giao hữu -> lệch với trang hồ sơ.)
 const rows = computed(() => {
   if (!pa.value || !pb.value) return []
-  const sa = aggregate(pa.value), sb = aggregate(pb.value)
+  const sa = aggregateOfficial(pa.value), sb = aggregateOfficial(pb.value)
   if (!sa || !sb) return []
   // Dùng KEY i18n thay cho chữ cứng -> đổi ngôn ngữ (VI/EN) nhãn cũng dịch theo.
+  // lower = true: chỉ số CÀNG ÍT càng tốt (vd thẻ vàng) -> đảo chiều khi tô "thắng".
   return [
     { key: 'goals', a: sa.goals, b: sb.goals },
     { key: 'assists', a: sa.assists, b: sb.assists },
     { key: 'apps', a: sa.apps, b: sb.apps },
     { key: 'minutes', a: sa.minutes, b: sb.minutes },
-    { key: 'yellow', a: sa.yellow, b: sb.yellow },
+    { key: 'yellow', a: sa.yellow, b: sb.yellow, lower: true },
     { key: 'rating', a: sa.rating, b: sb.rating },
   ]
 })
+
+// Bên nào "thắng" ở 1 hàng: mặc định nhiều hơn = thắng; hàng `lower` thì ít hơn = thắng.
+// Bằng nhau (hoặc thiếu số) -> không tô bên nào.
+function winA(r) {
+  if (r.a == null || r.b == null || r.a === r.b) return false
+  return r.lower ? r.a < r.b : r.a > r.b
+}
+function winB(r) {
+  if (r.a == null || r.b == null || r.a === r.b) return false
+  return r.lower ? r.b < r.a : r.b > r.a
+}
 </script>
 
 <template>
-  <router-link to="/" class="back">{{ $t('backHome') }}</router-link>
+  <a href="#" class="back" @click.prevent="$router.back()">{{ $t('backHome') }}</a>
   <h1 class="page-title">{{ $t('compareTitle') }}</h1>
 
   <div class="cmp-pickers">
@@ -110,9 +104,9 @@ const rows = computed(() => {
 
   <div v-if="rows.length" class="cmp-table">
     <div v-for="(r, i) in rows" :key="i" class="cmp-row">
-      <span class="val" :class="{ win: r.a > r.b }">{{ r.a }}</span>
+      <span class="val" :class="{ win: winA(r) }">{{ r.a }}</span>
       <span class="lbl">{{ $t(r.key) }}</span>
-      <span class="val" :class="{ win: r.b > r.a }">{{ r.b }}</span>
+      <span class="val" :class="{ win: winB(r) }">{{ r.b }}</span>
     </div>
   </div>
   <div v-else class="center">{{ $t('pickTwo') }}</div>
