@@ -24,11 +24,26 @@ function positioned(team, side) {
   // API đôi khi trả lineup THIẾU startXI (vd trận giao hữu / hạng thấp) -> phải bọc
   // để không 'startXI is not iterable' làm crash cả trang.
   if (!team || !Array.isArray(team.startXI)) return []
+  const players = team.startXI.filter((e) => e && e.player).map((e) => e.player)
+  // API đôi khi KHÔNG trả 'grid' (giao hữu / hạng thấp) -> mọi cầu thủ về '1:1' và
+  // dồn chung 1 hàng -> chồng đè nhau. Nếu thiếu grid thì tự xếp: thủ môn 1 hàng,
+  // còn lại mỗi hàng tối đa 4 -> không bị ríu vào nhau.
+  const hasGrid = players.some((p) => p.grid && p.grid.includes(':'))
   const byRow = {}
-  for (const e of team.startXI) {
-    if (!e || !e.player) continue
-    const [r, c] = (e.player.grid || '1:1').split(':').map(Number)
-    ;(byRow[r] = byRow[r] || []).push({ ...e.player, _c: c })
+  if (hasGrid) {
+    for (const p of players) {
+      const [r, c] = (p.grid || '1:1').split(':').map(Number)
+      ;(byRow[r] = byRow[r] || []).push({ ...p, _c: c })
+    }
+  } else {
+    const gk = players[0]
+    const rest = players.slice(1)
+    if (gk) byRow[1] = [{ ...gk, _c: 1 }]
+    let r = 2, c = 1
+    for (const p of rest) {
+      ;(byRow[r] = byRow[r] || []).push({ ...p, _c: c })
+      if (++c > 4) { r++; c = 1 }
+    }
   }
   const rowNums = Object.keys(byRow).map(Number).sort((a, b) => a - b)
   const nRows = Math.max(...rowNums, 1)
@@ -143,4 +158,15 @@ function goPlayer(id) {
 .subs-title img { width: 16px; height: 16px; object-fit: contain; }
 .sub-row { font-size: 13px; padding: 3px 0; cursor: pointer; }
 .sub-row:hover { color: var(--accent-2); }
+
+/* Điện thoại: thu nhỏ cầu thủ + tên để 4-5 người/hàng không bị đè lên nhau,
+   và xếp 2 cột dự bị thành 1 cột cho dễ đọc. */
+@media (max-width: 560px) {
+  .pp { width: 44px; }
+  .pp img { width: 28px; height: 28px; }
+  .pp .num { top: -4px; right: 5px; width: 15px; height: 15px; font-size: 9px; }
+  .pp .nm { font-size: 9px; max-width: 50px; margin-top: 2px; }
+  .pitch__label { font-size: 10px; padding: 2px 6px; }
+  .subs-wrap { grid-template-columns: 1fr; gap: 10px; }
+}
 </style>

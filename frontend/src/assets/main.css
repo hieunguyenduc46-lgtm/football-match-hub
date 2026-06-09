@@ -78,7 +78,7 @@ a { color: inherit; text-decoration: none; }
 
 /* Dropdown kết quả tìm kiếm */
 .search-dd {
-  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 30;
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 50;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   padding: 6px; max-height: 320px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
@@ -271,3 +271,15 @@ table.standings { width: 100%; border-collapse: collapse; font-size: 14px; }
   background-size: 200% 100%; animation: sk 1.2s infinite; margin-bottom: 8px;
 }
 @keyframes sk { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+
+/* ---- Responsive: điện thoại ---- */
+/* Trên màn hẹp, header 1 hàng làm ô tìm kiếm bị bóp còn 1 chấm. Cho header xuống
+   dòng: logo + các nút ở hàng trên, ô tìm kiếm chiếm trọn 1 hàng riêng bên dưới. */
+@media (max-width: 560px) {
+  .app-header__inner { flex-wrap: wrap; gap: 8px 6px; padding: 10px 12px; }
+  .logo { font-size: 16px; order: 0; margin-right: auto; }
+  .theme-btn { order: 1; width: 34px; height: 34px; font-size: 14px; }
+  .search-wrap { order: 2; flex: 1 0 100%; }
+  .filter-row { flex-wrap: wrap; }
+  .league-select { flex: 1 1 auto; min-width: 0; }
+}

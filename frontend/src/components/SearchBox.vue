@@ -103,7 +103,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onClickOutside); c
           :key="'c' + c.name"
           class="dd-item"
           :class="{ active: active === i }"
-          @click="go({ type: 'country', data: c })"
+          @pointerdown.prevent="go({ type: 'country', data: c })"
           @mousemove="active = i"
         >
           <img v-if="c.flag" :src="c.flag" class="round" @error="imgFallback" />
@@ -120,7 +120,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onClickOutside); c
           :key="'l' + l.id"
           class="dd-item"
           :class="{ active: active === nc + j }"
-          @click="go({ type: 'league', data: l })"
+          @pointerdown.prevent="go({ type: 'league', data: l })"
           @mousemove="active = nc + j"
         >
           <img :src="l.logo" @error="imgFallback" />
