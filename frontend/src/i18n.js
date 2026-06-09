@@ -3,7 +3,7 @@ import { reactive } from 'vue'
 // Từ điển 2 ngôn ngữ. Thêm khoá mới thì điền cả vi + en.
 export const messages = {
   vi: {
-    search_ph: 'Tìm đội, cầu thủ…',
+    search_ph: 'Tìm CLB, cầu thủ, CLB A vs B…',
     backHome: '← Quay lại',
     today: 'Hôm nay',
     league: 'Giải:',
@@ -132,7 +132,7 @@ export const messages = {
     loadingMatches: 'Đang tải trận đấu…',
   },
   en: {
-    search_ph: 'Search teams, players…',
+    search_ph: 'Search clubs, players, club A vs B…',
     backHome: '← Back',
     today: 'Today',
     league: 'League:',

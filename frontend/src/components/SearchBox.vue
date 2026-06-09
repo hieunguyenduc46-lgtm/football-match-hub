@@ -73,7 +73,7 @@ function goMatch() {
 }
 
 const placeholder = computed(() =>
-  state.locale === 'en' ? 'Search leagues, countries, matches…' : 'Tìm giải, quốc gia, trận đấu…'
+  state.locale === 'en' ? 'Search leagues, countries, country A vs B…' : 'Tìm giải, quốc gia, ĐTQG A vs B…'
 )
 const secCountries = computed(() => (state.locale === 'en' ? 'Countries' : 'Quốc gia'))
 const secLeagues = computed(() => (state.locale === 'en' ? 'Leagues' : 'Giải đấu'))
