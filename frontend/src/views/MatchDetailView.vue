@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
-import { isFinished, isLiveFixture, isStaleLive, matchTime, matchDay, imgFallback } from '../utils/format'
+import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, matchTime, matchDay, imgFallback } from '../utils/format'
 import LineupPitch from '../components/LineupPitch.vue'
 import MatchTimeline from '../components/MatchTimeline.vue'
 import MatchStats from '../components/MatchStats.vue'
@@ -196,6 +196,7 @@ onUnmounted(() => clearInterval(timer))
         <div class="muted" style="margin-top:4px;font-size:13px">
           <span v-if="isLiveFixture(fixture)" style="color:var(--live)">● {{ fixture.fixture.status.elapsed }}'</span>
           <span v-else-if="isFinished(fixture.fixture.status.short) || isStaleLive(fixture)">{{ $t('finished') }}</span>
+          <span v-else-if="isOff(fixture.fixture.status.short)" style="color:var(--live)">{{ $t(offStatusKey(fixture.fixture.status.short)) }}</span>
           <span v-else>{{ $t('notStarted') }}</span>
         </div>
       </div>

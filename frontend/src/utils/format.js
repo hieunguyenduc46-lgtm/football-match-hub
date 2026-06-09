@@ -10,11 +10,31 @@ function localeTag() {
   return state.locale === 'en' ? 'en-GB' : 'vi-VN'
 }
 
+// Trận KHÔNG diễn ra theo lịch (API-Football):
+//   PST=hoãn, SUSP=tạm dừng, INT=gián đoạn, TBD=chưa định giờ  -> nhóm "hoãn"
+//   CANC=huỷ, ABD=bỏ dở, WO=walkover, AWD=xử thắng             -> nhóm "huỷ"
+export const POSTPONED_STATUSES = ['PST', 'SUSP', 'INT', 'TBD']
+export const CANCELLED_STATUSES = ['CANC', 'ABD', 'WO', 'AWD']
+
 export function isLive(short) {
   return LIVE_STATUSES.includes(short)
 }
 export function isFinished(short) {
   return FINISHED_STATUSES.includes(short)
+}
+export function isPostponed(short) {
+  return POSTPONED_STATUSES.includes(short)
+}
+export function isCancelled(short) {
+  return CANCELLED_STATUSES.includes(short)
+}
+// Trận bị huỷ/hoãn (không đá đúng lịch) -> KHÔNG được hiện "Chưa đá".
+export function isOff(short) {
+  return isPostponed(short) || isCancelled(short)
+}
+// Khoá i18n cho nhãn trạng thái "không đá": 'cancelled' hoặc 'postponed'.
+export function offStatusKey(short) {
+  return isCancelled(short) ? 'cancelled' : 'postponed'
 }
 
 // ===== "LIVE treo" (stale live) =====

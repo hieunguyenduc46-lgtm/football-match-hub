@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { isFinished, isLiveFixture, isStaleLive, matchTime, matchDay, imgFallback } from '../utils/format'
+import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, matchTime, matchDay, imgFallback } from '../utils/format'
 import { teamName } from '../utils/countryNames'
 
 const props = defineProps({
@@ -20,6 +20,9 @@ const f = computed(() => props.fixture)
 // "Live treo" (status kẹt đang đá nhiều giờ) -> coi như đã kết thúc, không hiện badge LIVE.
 const live = computed(() => isLiveFixture(props.fixture))
 const finished = computed(() => isFinished(props.fixture.fixture.status.short) || isStaleLive(props.fixture))
+// Trận bị huỷ/hoãn -> hiện nhãn riêng thay vì giờ đá (tránh tưởng nhầm "sắp đá").
+const off = computed(() => isOff(props.fixture.fixture.status.short))
+const offLabel = computed(() => offStatusKey(props.fixture.fixture.status.short))
 
 function open() {
   router.push({ name: 'match', params: { id: props.fixture.fixture.id } })
@@ -37,6 +40,9 @@ function open() {
       </template>
       <template v-else-if="finished">
         <div class="ft">FT</div>
+      </template>
+      <template v-else-if="off">
+        <div class="mc-off">{{ $t(offLabel) }}</div>
       </template>
       <template v-else>
         <div>{{ matchTime(f.fixture.date) }}</div>
@@ -65,4 +71,5 @@ function open() {
 
 <style scoped>
 .mc-date { font-size: 11px; color: var(--text-dim); margin-bottom: 2px; white-space: nowrap; }
+.mc-off { font-size: 12px; font-weight: 700; color: var(--live); white-space: nowrap; }
 </style>
