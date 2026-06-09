@@ -47,6 +47,9 @@ export function roundLabel(round) {
   if (!round) return ''
   const D = DICT[state.locale === 'en' ? 'en' : 'vi']
   const r = String(round).toLowerCase().trim()
+  // Giao hữu: API trả round = "Friendly International" / "Club Friendlies" -> trùng với tên
+  // giải ("Giao hữu") và là tiếng Anh -> ẩn đi để header không bị lặp/lẫn ngôn ngữ.
+  if (/friendl/.test(r)) return ''
   const numMatch = r.match(/(\d+)\s*$/)          // số ở CUỐI chuỗi (vd "- 38", "- 1")
   const num = numMatch ? numMatch[1] : ''
 

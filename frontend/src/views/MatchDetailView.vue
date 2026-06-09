@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import api from '../services/api'
 import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, matchTime, matchDayYear, imgFallback } from '../utils/format'
 import { roundLabel } from '../utils/roundNames'
+import { leagueName } from '../utils/leagueNames'
 import LineupPitch from '../components/LineupPitch.vue'
 import MatchTimeline from '../components/MatchTimeline.vue'
 import MatchStats from '../components/MatchStats.vue'
@@ -71,7 +72,7 @@ const awayRank = computed(() => rankOf(fixture.value?.teams.away.id))
 const headerLine = computed(() => {
   if (!fixture.value) return ''
   return [
-    fixture.value.league?.name,
+    leagueName(fixture.value.league?.name, fixture.value.league?.id),
     roundLabel(fixture.value.league?.round),
     matchDayYear(fixture.value.fixture?.date),
     matchTime(fixture.value.fixture?.date),
