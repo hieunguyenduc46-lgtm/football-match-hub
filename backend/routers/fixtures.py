@@ -1,9 +1,9 @@
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 import api_football
-from config import CALENDAR_YEAR_LEAGUES, default_season
+from config import CALENDAR_YEAR_LEAGUES, default_season, settings
 
 router = APIRouter(prefix="/api", tags=["fixtures"])
 
@@ -48,7 +48,9 @@ async def country_fixtures(name: str):
 
 @router.get("/_debug/fixtures")
 async def debug_fixtures(date: Optional[str] = None, league: Optional[int] = None, season: Optional[int] = None):
-    """Xem nguyên văn API trả về (để chẩn lỗi). Chỉ chạy ở chế độ API thật."""
+    """Xem nguyên văn API trả về (để chẩn lỗi). CHỈ chạy khi DEBUG=true; prod trả 404."""
+    if not settings.debug:
+        raise HTTPException(status_code=404, detail="Not found")
     params = {}
     if date:
         params["date"] = date

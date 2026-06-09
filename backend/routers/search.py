@@ -1,19 +1,24 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
 import api_football
+import config
 import mock_data
+from ratelimit import limiter
 
 router = APIRouter(prefix="/api", tags=["search"])
 
 
 @router.get("/search")
-async def search(q: str = ""):
-    """Tìm đội + cầu thủ theo tên (cho ô search ở header)."""
+@limiter.shared_limit("40/minute", scope="search")
+async def search(request: Request, q: str = ""):
+    """Tìm đội + cầu thủ theo tên (cho ô search ở header).
+    Rate limit: gọi nhiều /players/profiles -> chặn spam, nhưng đủ rộng cho gõ bình thường."""
     return await api_football.search(q)
 
 
 @router.get("/match-search")
-async def match_search(q: str = ""):
+@limiter.shared_limit("40/minute", scope="search")
+async def match_search(request: Request, q: str = ""):
     """Tìm trận đấu. Gõ 'A vs B' -> đối đầu 2 đội; gõ 1 đội -> lịch đấu đội đó.
     Trả {mode, teamA/teamB hoặc team, recent: [...], upcoming: [...]}."""
     if not (q or "").strip():
@@ -23,7 +28,10 @@ async def match_search(q: str = ""):
 
 @router.get("/_debug/players")
 async def debug_players(search: str = ""):
-    """Xem nguyên văn API trả về cho tìm kiếm cầu thủ (để chẩn lỗi)."""
+    """Xem nguyên văn API trả về cho tìm kiếm cầu thủ (để chẩn lỗi).
+    CHỈ chạy khi DEBUG=true; ở production trả 404."""
+    if not config.settings.debug:
+        raise HTTPException(status_code=404, detail="Not found")
     try:
         return await api_football.raw_request("/players/profiles", {"search": search})
     except Exception as e:

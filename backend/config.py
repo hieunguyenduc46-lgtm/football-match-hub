@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # CORS: 1 hoặc nhiều origin, cách nhau bằng dấu phẩy (cho lúc deploy)
     frontend_origin: str = "http://localhost:5173"
     cache_ttl_seconds: int = 300
+    # Bật các endpoint /_debug/* (xem nguyên văn API). MẶC ĐỊNH tắt ở production để
+    # không lộ dữ liệu nội bộ + không tốn quota. Đặt DEBUG=true ở local khi cần chẩn lỗi.
+    debug: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

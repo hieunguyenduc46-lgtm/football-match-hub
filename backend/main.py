@@ -6,10 +6,19 @@ Docs tự sinh: http://localhost:8000/docs
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from config import settings
+from ratelimit import limiter
 from routers import fixtures, standings, teams, players, search
 
 app = FastAPI(title="Football Match Hub API", version="0.1.0")
+
+# Gắn limiter (rate limit theo IP). Chỉ các route có @limiter.limit mới bị giới hạn;
+# vượt giới hạn -> trả 429 (handler mặc định của slowapi), không làm hỏng các route khác.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Cho phép frontend gọi sang backend.
 # FRONTEND_ORIGIN có thể là nhiều URL cách nhau dấu phẩy (dev + domain deploy).

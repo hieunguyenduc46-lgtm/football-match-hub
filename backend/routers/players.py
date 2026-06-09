@@ -1,9 +1,10 @@
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
 import api_football
 import config
+from ratelimit import limiter
 
 router = APIRouter(prefix="/api", tags=["players"])
 
@@ -22,24 +23,31 @@ async def player_detail(player_id: int, season: Optional[int] = None):
 
 
 @router.get("/players/{player_id}/career")
-async def player_career(player_id: int):
+@limiter.shared_limit("30/minute", scope="player_heavy")
+async def player_career(request: Request, player_id: int):
     """Tổng bàn thắng chính thức cả sự nghiệp (mọi CLB + ĐTQG, bỏ giao hữu).
-    Tải riêng vì phải gọi nhiều mùa -> để không làm chậm trang chi tiết."""
+    Tải riêng vì phải gọi nhiều mùa -> để không làm chậm trang chi tiết.
+    Rate limit: endpoint nặng (quét nhiều mùa) -> chặn gọi dồn nhiều id khác nhau."""
     return await api_football.get_player_career(player_id)
 
 
 @router.get("/players/{player_id}/motm")
-async def player_motm(player_id: int, season: Optional[int] = None):
+@limiter.shared_limit("30/minute", scope="player_heavy")
+async def player_motm(request: Request, player_id: int, season: Optional[int] = None):
     """Số lần 'Cầu thủ hay nhất trận' (rating cao nhất) trong MÙA đang xem.
     API-Football không có sẵn -> tự tính bằng cách quét fixtures. Tải riêng (lazy)
-    vì tốn nhiều request; kết quả được cache 6h ở tầng api_football."""
+    vì tốn nhiều request; kết quả được cache 6h ở tầng api_football.
+    Rate limit: endpoint NẶNG nhất (~50 request/lần) -> chặn 1 IP gọi nhiều id khác nhau."""
     return await api_football.get_player_motm(player_id, season or config.default_season())
 
 
 @router.get("/_debug/player/{player_id}")
 async def debug_player(player_id: int, season: Optional[int] = None):
     """Debug: liệt kê MỌI mục statistics (đội / giải / bàn / số trận) qua 3 mùa,
-    để soi vì sao thiếu số liệu ĐTQG. Mở: /api/_debug/player/<id>"""
+    để soi vì sao thiếu số liệu ĐTQG. Mở: /api/_debug/player/<id>
+    CHỈ chạy khi DEBUG=true; ở production trả 404 để không lộ dữ liệu + không tốn quota."""
+    if not config.settings.debug:
+        raise HTTPException(status_code=404, detail="Not found")
     base = season or config.default_season()
     out = {}
     for s in (base, base + 1, base - 1):
