@@ -78,6 +78,16 @@ export function matchDay(iso) {
   }
 }
 
+// Như matchDay nhưng KÈM NĂM (vd "11 thg 12, 2022"). Dùng ở trang chi tiết trận để biết
+// trận thuộc năm/kỳ giải nào (quan trọng với World Cup, các giải cũ...).
+export function matchDayYear(iso) {
+  try {
+    return new Date(iso).toLocaleDateString(localeTag(), { day: '2-digit', month: 'short', year: 'numeric' })
+  } catch {
+    return ''
+  }
+}
+
 // Dữ liệu ĐỘI HÌNH của API-Football KHÔNG kèm 'photo' cho cầu thủ (chỉ có id, name,
 // number, pos, grid). Vì vậy tự dựng URL ảnh từ id theo đúng CDN của API-Football.
 // (Nếu object đã có sẵn 'photo' từ endpoint khác thì ưu tiên dùng luôn.)

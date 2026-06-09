@@ -202,11 +202,11 @@ function goPlayer(id) {
         <img :src="s.player.photo" @error="imgFallback" style="width:36px;height:36px;border-radius:50%;object-fit:cover" />
         <span>
           <div style="font-weight:600">{{ s.player.name }}</div>
-          <div class="muted" style="font-size:12px">{{ teamName(s.statistics[0].team.name) }}</div>
+          <div class="muted" style="font-size:12px">{{ teamName(s.statistics?.[0]?.team?.name || '') }}</div>
         </span>
         <span style="text-align:right">
-          <strong style="font-size:18px">{{ s.statistics[0].goals.total }}</strong>
-          <div class="muted" style="font-size:12px">{{ s.statistics[0].goals.assists ?? 0 }} {{ $t('assistsShort') }}</div>
+          <strong style="font-size:18px">{{ s.statistics?.[0]?.goals?.total ?? 0 }}</strong>
+          <div class="muted" style="font-size:12px">{{ s.statistics?.[0]?.goals?.assists ?? 0 }} {{ $t('assistsShort') }}</div>
         </span>
       </div>
     </div>

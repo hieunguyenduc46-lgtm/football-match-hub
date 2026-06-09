@@ -2,7 +2,8 @@
 import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
-import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, matchTime, matchDay, imgFallback } from '../utils/format'
+import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, matchTime, matchDayYear, imgFallback } from '../utils/format'
+import { roundLabel } from '../utils/roundNames'
 import LineupPitch from '../components/LineupPitch.vue'
 import MatchTimeline from '../components/MatchTimeline.vue'
 import MatchStats from '../components/MatchStats.vue'
@@ -64,6 +65,18 @@ function rankOf(teamId) {
 }
 const homeRank = computed(() => rankOf(fixture.value?.teams.home.id))
 const awayRank = computed(() => rankOf(fixture.value?.teams.away.id))
+
+// Dòng thông tin trên đầu trận: Giải · Vòng đấu · Ngày (kèm năm) · Giờ.
+// Bỏ qua phần nào rỗng (vd giải không có 'round') để không hiện dấu '·' thừa.
+const headerLine = computed(() => {
+  if (!fixture.value) return ''
+  return [
+    fixture.value.league?.name,
+    roundLabel(fixture.value.league?.round),
+    matchDayYear(fixture.value.fixture?.date),
+    matchTime(fixture.value.fixture?.date),
+  ].filter(Boolean).join(' · ')
+})
 
 let loadSeq = 0
 async function loadMatch() {
@@ -177,9 +190,7 @@ onUnmounted(() => clearInterval(timer))
   <div v-else-if="!fixture" class="center">{{ $t('matchNotFound') }}</div>
 
   <div v-else>
-    <p class="muted" style="text-align:center">
-      {{ fixture.league.name }} · {{ matchDay(fixture.fixture.date) }} · {{ matchTime(fixture.fixture.date) }}
-    </p>
+    <p class="muted" style="text-align:center">{{ headerLine }}</p>
 
     <div style="display:flex; align-items:center; justify-content:space-around; padding:18px 0;">
       <router-link :to="{ name: 'team', params: { id: fixture.teams.home.id } }" style="text-align:center; width:38%;">
