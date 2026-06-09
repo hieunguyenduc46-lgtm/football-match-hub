@@ -206,7 +206,7 @@ onUnmounted(() => clearInterval(timer))
         </div>
         <div style="font-size:20px;font-weight:700" v-else>vs</div>
         <div class="muted" style="margin-top:4px;font-size:13px">
-          <span v-if="isLiveFixture(fixture)" style="color:var(--live)">● {{ fixture.fixture.status.elapsed }}'</span>
+          <span v-if="isLiveFixture(fixture)" style="color:var(--live)">● {{ fixture.fixture.status.elapsed }}{{ fixture.fixture.status.extra ? '+' + fixture.fixture.status.extra : '' }}'</span>
           <span v-else-if="isFinished(fixture.fixture.status.short) || isStaleLive(fixture)">{{ $t('finished') }}</span>
           <span v-else-if="isOff(fixture.fixture.status.short)" style="color:var(--live)">{{ $t(offStatusKey(fixture.fixture.status.short)) }}</span>
           <span v-else>{{ $t('notStarted') }}</span>

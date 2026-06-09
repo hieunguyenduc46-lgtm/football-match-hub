@@ -16,3 +16,6 @@ frontend/.env
 
 # Vite temp config files
 frontend/vite.config.js.timestamp-*
+
+# FUSE leftover files
+.fuse_hidden*

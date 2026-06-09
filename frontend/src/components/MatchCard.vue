@@ -36,7 +36,7 @@ function open() {
       <div v-if="showDate" class="mc-date">{{ matchDay(f.fixture.date) }}</div>
       <template v-if="live">
         <div class="live">● LIVE</div>
-        <div>{{ f.fixture.status.elapsed }}'</div>
+        <div>{{ f.fixture.status.elapsed }}{{ f.fixture.status.extra ? '+' + f.fixture.status.extra : '' }}'</div>
       </template>
       <template v-else-if="finished">
         <div class="ft">FT</div>
