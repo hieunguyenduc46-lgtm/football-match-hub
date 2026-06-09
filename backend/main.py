@@ -30,6 +30,8 @@ app.include_router(players.router)
 app.include_router(search.router)
 
 
-@app.get("/api/health")
+# Nhận cả GET lẫn HEAD: nhiều dịch vụ uptime (UptimeRobot...) ping bằng HEAD,
+# nếu chỉ khai báo GET thì HEAD bị trả 405 -> monitor báo "Down" nhầm.
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok", "mock_mode": settings.use_mock}
