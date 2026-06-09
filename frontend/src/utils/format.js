@@ -2,7 +2,8 @@ import { state } from '../i18n'
 
 // Các nhóm trạng thái của API-Football
 export const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE']
-export const FINISHED_STATUSES = ['FT', 'AET', 'PEN']
+// WO=walkover, AWD=xử thắng: tuy bất thường nhưng ĐÃ CÓ kết quả/tỉ số -> tính là "đã xong".
+export const FINISHED_STATUSES = ['FT', 'AET', 'PEN', 'WO', 'AWD']
 
 // Map locale của app -> mã BCP-47 cho Intl. Đọc state.locale (reactive)
 // nên khi đổi ngôn ngữ, template gọi các hàm này sẽ tự re-render.
@@ -10,11 +11,11 @@ function localeTag() {
   return state.locale === 'en' ? 'en-GB' : 'vi-VN'
 }
 
-// Trận KHÔNG diễn ra theo lịch (API-Football):
+// Trận KHÔNG diễn ra theo lịch (API-Football), KHÔNG có kết quả bình thường:
 //   PST=hoãn, SUSP=tạm dừng, INT=gián đoạn, TBD=chưa định giờ  -> nhóm "hoãn"
-//   CANC=huỷ, ABD=bỏ dở, WO=walkover, AWD=xử thắng             -> nhóm "huỷ"
+//   CANC=huỷ, ABD=bỏ dở                                        -> nhóm "huỷ"
 export const POSTPONED_STATUSES = ['PST', 'SUSP', 'INT', 'TBD']
-export const CANCELLED_STATUSES = ['CANC', 'ABD', 'WO', 'AWD']
+export const CANCELLED_STATUSES = ['CANC', 'ABD']
 
 export function isLive(short) {
   return LIVE_STATUSES.includes(short)
