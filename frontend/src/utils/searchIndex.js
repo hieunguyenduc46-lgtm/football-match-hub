@@ -110,3 +110,17 @@ export function searchIndex(query, limit = 12) {
 
   return { leagues, countries }
 }
+
+// Tìm 1 ĐỘI TUYỂN QUỐC GIA theo tên người dùng gõ (EN hoặc VI) -> trả {name, vi} hoặc null.
+// Dùng để hiển thị tên đội đã chuẩn hoá/đã dịch trong gợi ý "A vs B".
+export function resolveCountry(term) {
+  const q = norm(term)
+  if (!q) return null
+  let best = null
+  let bestScore = 99
+  for (const c of _countries) {
+    const s = Math.min(scoreName(c._n, q), scoreName(c._vi, q))
+    if (s < bestScore) { bestScore = s; best = c }
+  }
+  return bestScore < 99 ? best : null
+}
