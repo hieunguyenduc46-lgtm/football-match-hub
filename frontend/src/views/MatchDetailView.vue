@@ -101,6 +101,53 @@ const penaltyScore = computed(() => {
   return (p && p.home != null && p.away != null) ? `${p.home} - ${p.away}` : null
 })
 
+// ===== Cặp đấu 2 LƯỢT (knockout C1...) =====
+// API-Football KHÔNG gắn nhãn lượt đi/về. Cách suy: 2 lượt của cùng cặp có CÙNG giải +
+// mùa + vòng, 2 đội giống nhau (đổi sân), khác ngày. Ghép qua dữ liệu H2H rồi:
+//  - lượt = theo thứ tự ngày (trước = đi, sau = về),
+//  - chung cuộc = cộng bàn theo từng đội qua 2 lượt (chỉ hiện ở lượt VỀ đã kết thúc).
+// Không ghép được (vd chung kết 1 lượt, bán kết cúp QG 1 lượt) -> legInfo = null -> không hiện gì.
+const legInfo = ref(null)   // { leg: 1|2, agg: {home, away} | null }
+
+async function detectLeg(seq) {
+  const fx = fixture.value
+  if (!fx) return
+  const round = fx.league?.round || ''
+  // Chỉ xét vòng knockout; bỏ vòng bảng / VĐQG để khỏi gọi H2H thừa.
+  if (!/round of|quarter|semi|final|play-?off|last \d+/i.test(round)) return
+  const homeId = fx.teams.home.id, awayId = fx.teams.away.id
+  let list = []
+  try {
+    const { data } = await api.get(`/fixtures/${id}/h2h`, { params: { home: homeId, away: awayId } })
+    list = data.response || []
+  } catch (e) { return }
+  if (seq !== loadSeq) return
+  // Lượt còn lại: cùng giải + mùa + vòng, khác fixture hiện tại.
+  const other = list.find((m) =>
+    m.fixture?.id !== fx.fixture.id &&
+    m.league?.id === fx.league?.id &&
+    m.league?.season === fx.league?.season &&
+    (m.league?.round || '') === round
+  )
+  if (!other) return                                   // không phải cặp 2 lượt -> bỏ qua
+  const isSecond = (fx.fixture?.date || '') >= (other.fixture?.date || '')
+  // Cộng tổng bàn theo team id (vì đổi sân giữa 2 lượt).
+  const tally = {}
+  const add = (m) => {
+    const hg = m.goals?.home, ag = m.goals?.away
+    if (hg == null || ag == null) return false
+    tally[m.teams.home.id] = (tally[m.teams.home.id] || 0) + hg
+    tally[m.teams.away.id] = (tally[m.teams.away.id] || 0) + ag
+    return true
+  }
+  const both = add(fx) && add(other)
+  const finished = isFinished(fx.fixture.status.short) || isStaleLive(fx)
+  const agg = (isSecond && finished && both)
+    ? { home: tally[homeId] || 0, away: tally[awayId] || 0 }
+    : null
+  if (seq === loadSeq) legInfo.value = { leg: isSecond ? 2 : 1, agg }
+}
+
 let loadSeq = 0
 async function loadMatch() {
   const seq = ++loadSeq
@@ -115,6 +162,7 @@ async function loadMatch() {
   ratings.value = []
   h2h.value = []
   standings.value = []
+  legInfo.value = null
   tab.value = 'lineup'
   fetched = {}
 
@@ -127,6 +175,7 @@ async function loadMatch() {
   if (fRes.status === 'fulfilled') fixture.value = fRes.value.data.response?.[0] || null
   else error.value = fRes.reason?.message || 'Không tải được trận đấu'
   if (fixture.value) setTitle(`${teamName(fixture.value.teams.home.name)} - ${teamName(fixture.value.teams.away.name)}`)
+  if (fixture.value) detectLeg(seq)   // suy lượt đi/về + tính chung cuộc (chỉ vòng knockout)
   if (lRes.status === 'fulfilled') lineups.value = lRes.value.data.response || []
   if (eRes.status === 'fulfilled') events.value = eRes.value.data.response || []
   loading.value = false
@@ -221,6 +270,11 @@ onUnmounted(() => clearInterval(timer))
   <div v-else>
     <p class="muted" style="text-align:center">{{ headerLine }}</p>
 
+    <!-- Tag lượt đi/về cho cặp đấu 2 lượt (chỉ hiện khi ghép được cặp) -->
+    <div v-if="legInfo" style="text-align:center">
+      <span class="leg-tag">{{ legInfo.leg === 2 ? $t('secondLeg') : $t('firstLeg') }}</span>
+    </div>
+
     <div v-if="matchItem" style="display:flex; justify-content:center; margin:4px 0 2px;">
       <FavButton type="match" :item="matchItem" />
     </div>
@@ -233,6 +287,8 @@ onUnmounted(() => clearInterval(timer))
       </router-link>
 
       <div style="text-align:center">
+        <!-- Tỉ số CHUNG CUỘC (chỉ hiện ở lượt về đã kết thúc) -->
+        <div v-if="legInfo && legInfo.agg" class="agg-score">{{ $t('aggregate') }} {{ legInfo.agg.home }} - {{ legInfo.agg.away }}</div>
         <div style="font-size:34px;font-weight:800" v-if="fixture.goals.home !== null">
           {{ fixture.goals.home }} - {{ fixture.goals.away }}
         </div>
@@ -330,4 +386,6 @@ onUnmounted(() => clearInterval(timer))
 .gs-min { color: var(--text-dim); font-weight: 700; }
 .gs-tag { color: var(--text-dim); font-size: 11px; }
 .pen-score { margin-top: 3px; font-size: 13px; font-weight: 700; color: var(--accent-2); }
+.leg-tag { display: inline-block; font-size: 12px; font-weight: 700; color: var(--accent-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 12px; margin-top: 2px; }
+.agg-score { font-size: 13px; font-weight: 700; color: var(--text-dim); margin-bottom: 2px; }
 </style>

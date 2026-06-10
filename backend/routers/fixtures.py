@@ -46,6 +46,12 @@ async def country_fixtures(name: str):
     return await api_football.get_country_fixtures(name)
 
 
+@router.get("/leagues/{league_id}/bracket")
+async def league_bracket(league_id: int):
+    """Các trận vòng knockout của giải -> client dựng sơ đồ nhánh đấu. [] nếu không có."""
+    return {"response": await api_football.get_bracket(league_id)}
+
+
 @router.get("/_debug/fixtures")
 async def debug_fixtures(date: Optional[str] = None, league: Optional[int] = None, season: Optional[int] = None):
     """Xem nguyên văn API trả về (để chẩn lỗi). CHỈ chạy khi DEBUG=true; prod trả 404."""

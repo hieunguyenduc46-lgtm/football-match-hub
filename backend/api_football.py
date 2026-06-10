@@ -560,6 +560,24 @@ async def get_league_fixtures(league_id: int, last: int = 12, nxt: int = 12) -> 
     return {"recent": recent, "upcoming": upcoming}
 
 
+async def get_bracket(league_id: int) -> list:
+    """Các trận VÒNG LOẠI TRỰC TIẾP (knockout) của giải, mùa hiện tại -> client dựng SƠ ĐỒ
+    NHÁNH ĐẤU. Trả [] nếu giải không có vòng knockout (vd VĐQG) -> client ẩn tab.
+    1 request /fixtures?league&season (cache 6h) rồi lọc theo tên vòng."""
+    if settings.use_mock:
+        return []
+    season = config.season_for(league_id)
+    data = await _request("/fixtures", {"league": league_id, "season": season}, ttl=STATIC_TTL)
+    out = []
+    for f in data.get("response", []):
+        rnd = ((f.get("league") or {}).get("round") or "")
+        # Vòng knockout (R16/QF/SF/Final/play-off...), BỎ vòng bảng / VĐQG / lượt league-stage.
+        if re.search(r"round of|quarter|semi|\bfinal\b|play-?off|1/\d|last \d+", rnd, re.IGNORECASE) \
+                and not re.search(r"group|regular season|league stage|qualif", rnd, re.IGNORECASE):
+            out.append(f)
+    return out
+
+
 async def get_national_team(country: str) -> Optional[dict]:
     """Tìm ĐỘI TUYỂN QUỐC GIA theo tên nước (chấp nhận tên tiếng Việt). Ưu tiên national=true."""
     name = _vi_translate((country or "").strip())  # 'tây ban nha' -> 'Spain'

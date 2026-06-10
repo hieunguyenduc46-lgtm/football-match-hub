@@ -9,6 +9,14 @@ import { teamName } from '../utils/countryNames'
 import { leagueName as translateLeague } from '../utils/leagueNames'
 import MatchCard from '../components/MatchCard.vue'
 import FavButton from '../components/FavButton.vue'
+import KnockoutBracket from '../components/KnockoutBracket.vue'
+
+// Các giải CÓ vòng loại trực tiếp -> hiện tab "Nhánh đấu". Dùng danh sách curated để KHÔNG
+// gọi API nặng (lấy cả mùa) cho VĐQG thường vốn không có nhánh đấu.
+const BRACKET_LEAGUES = new Set([
+  1, 2, 3, 848, 4, 9, 15, 5, 13, 11, 16, 6, 7, 17,   // C1/C2/C3, World Cup, Euro, Copa America, Club WC, Nations, Libertadores...
+  45, 143, 137, 81, 66, 48,                          // cúp QG: FA Cup, Copa del Rey, Coppa Italia, DFB Pokal, Coupe de France, EFL Cup
+])
 
 const route = useRoute()
 const router = useRouter()
@@ -35,6 +43,25 @@ async function loadFixtures(id) {
 }
 const hasFixtures = computed(() => fixtures.value.recent.length || fixtures.value.upcoming.length)
 watch(tab, (v) => { if (v === 'fixtures') loadFixtures(route.params.id) })
+
+// Nhánh đấu (tab 'bracket') — chỉ với giải có knockout; tải LƯỜI khi mở tab.
+const showBracketTab = computed(() => BRACKET_LEAGUES.has(Number(route.params.id)))
+const bracket = ref([])
+const brLoading = ref(false)
+let brLoadedId = null
+async function loadBracket(id) {
+  if (!id || brLoadedId === id) return
+  brLoadedId = id
+  brLoading.value = true
+  bracket.value = []
+  try {
+    const { data } = await api.get(`/leagues/${id}/bracket`)
+    if (brLoadedId === id) bracket.value = data.response || []
+  } finally {
+    if (brLoadedId === id) brLoading.value = false
+  }
+}
+watch(tab, (v) => { if (v === 'bracket') loadBracket(route.params.id) })
 
 // standings = mảng các "bảng" (giải thường: 1 bảng; World Cup: 8 bảng A–H).
 const groups = computed(() => raw.value?.league?.standings || [])
@@ -93,7 +120,10 @@ async function loadLeague(id) {
   scorers.value = []
   fxLoadedId = null
   fixtures.value = { recent: [], upcoming: [] }
+  brLoadedId = null
+  bracket.value = []
   if (tab.value === 'fixtures') loadFixtures(id)
+  if (tab.value === 'bracket') loadBracket(id)
   try {
     // Không cố định season nữa: để backend tự chọn mùa đúng theo giải
     // (vd World Cup -> 2026, VĐQG -> 2025).
@@ -140,10 +170,17 @@ function goPlayer(id) {
   <div class="tabs">
     <button class="tab" :class="{ active: tab === 'standings' }" @click="tab = 'standings'">{{ $t('tab_standings') }}</button>
     <button class="tab" :class="{ active: tab === 'fixtures' }" @click="tab = 'fixtures'">{{ $t('tab_fixtures') }}</button>
+    <button v-if="showBracketTab" class="tab" :class="{ active: tab === 'bracket' }" @click="tab = 'bracket'">{{ $t('tab_bracket') }}</button>
     <button class="tab" :class="{ active: tab === 'scorers' }" @click="tab = 'scorers'">{{ $t('tab_scorers') }}</button>
   </div>
 
-  <div v-if="loading && tab !== 'fixtures'" class="skeleton" style="height:200px"></div>
+  <!-- Nhánh đấu (knockout) -->
+  <div v-if="tab === 'bracket'">
+    <div v-if="brLoading"><div class="skeleton" style="height:240px"></div></div>
+    <KnockoutBracket v-else :matches="bracket" />
+  </div>
+
+  <div v-else-if="loading && tab !== 'fixtures'" class="skeleton" style="height:200px"></div>
 
   <!-- Lịch đấu: kết quả gần đây + trận sắp tới -->
   <div v-else-if="tab === 'fixtures'">
