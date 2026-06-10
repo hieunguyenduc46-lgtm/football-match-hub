@@ -11,6 +11,7 @@ import MatchTimeline from '../components/MatchTimeline.vue'
 import MatchStats from '../components/MatchStats.vue'
 import PlayerRatings from '../components/PlayerRatings.vue'
 import H2HList from '../components/H2HList.vue'
+import FavButton from '../components/FavButton.vue'
 import { teamName } from '../utils/countryNames'
 
 const route = useRoute()
@@ -78,6 +79,18 @@ const headerLine = computed(() => {
     matchDayYear(fixture.value.fixture?.date),
     matchTime(fixture.value.fixture?.date),
   ].filter(Boolean).join(' · ')
+})
+
+// Dữ liệu để FOLLOW trận (2 đội + ngày + tên giải) -> hiện lại ở trang Theo dõi, link /match/:id.
+const matchItem = computed(() => {
+  if (!fixture.value) return null
+  return {
+    id: fixture.value.fixture?.id,
+    home: { name: fixture.value.teams.home.name, logo: fixture.value.teams.home.logo },
+    away: { name: fixture.value.teams.away.name, logo: fixture.value.teams.away.logo },
+    date: fixture.value.fixture?.date,
+    league: fixture.value.league?.name,
+  }
 })
 
 let loadSeq = 0
@@ -199,6 +212,10 @@ onUnmounted(() => clearInterval(timer))
 
   <div v-else>
     <p class="muted" style="text-align:center">{{ headerLine }}</p>
+
+    <div v-if="matchItem" style="display:flex; justify-content:center; margin:4px 0 2px;">
+      <FavButton type="match" :item="matchItem" />
+    </div>
 
     <div style="display:flex; align-items:center; justify-content:space-around; padding:18px 0;">
       <router-link :to="{ name: 'team', params: { id: fixture.teams.home.id } }" style="text-align:center; width:38%;">

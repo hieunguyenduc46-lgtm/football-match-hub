@@ -3,18 +3,25 @@ import { computed } from 'vue'
 import { useFavoritesStore } from '../stores/favorites'
 
 const props = defineProps({
-  type: { type: String, required: true }, // 'team' | 'player'
-  item: { type: Object, required: true }, // { id, name, logo | photo }
+  type: { type: String, required: true }, // 'team' | 'player' | 'league' | 'match'
+  item: { type: Object, required: true }, // { id, ... } tuỳ loại
 })
 
 const fav = useFavoritesStore()
-const active = computed(() =>
-  props.type === 'team' ? fav.isTeamFav(props.item.id) : fav.isPlayerFav(props.item.id)
-)
+const active = computed(() => {
+  const id = props.item.id
+  if (props.type === 'team') return fav.isTeamFav(id)
+  if (props.type === 'player') return fav.isPlayerFav(id)
+  if (props.type === 'league') return fav.isLeagueFav(id)
+  if (props.type === 'match') return fav.isMatchFav(id)
+  return false
+})
 
 function toggle() {
   if (props.type === 'team') fav.toggleTeam(props.item)
-  else fav.togglePlayer(props.item)
+  else if (props.type === 'player') fav.togglePlayer(props.item)
+  else if (props.type === 'league') fav.toggleLeague(props.item)
+  else if (props.type === 'match') fav.toggleMatch(props.item)
 }
 </script>
 

@@ -8,6 +8,7 @@ import { t } from '../i18n'
 import { teamName } from '../utils/countryNames'
 import { leagueName as translateLeague } from '../utils/leagueNames'
 import MatchCard from '../components/MatchCard.vue'
+import FavButton from '../components/FavButton.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -38,6 +39,13 @@ watch(tab, (v) => { if (v === 'fixtures') loadFixtures(route.params.id) })
 // standings = mảng các "bảng" (giải thường: 1 bảng; World Cup: 8 bảng A–H).
 const groups = computed(() => raw.value?.league?.standings || [])
 const leagueName = computed(() => translateLeague(raw.value?.league?.name, raw.value?.league?.id ?? route.params.id) || t('league_default'))
+
+// Dữ liệu để FOLLOW giải (lưu id + tên gốc + logo). Logo lấy từ standings, thiếu thì dựng theo id.
+const leagueItem = computed(() => ({
+  id: Number(route.params.id),
+  name: raw.value?.league?.name || leagueName.value,
+  logo: raw.value?.league?.logo || `https://media.api-sports.io/football/leagues/${route.params.id}.png`,
+}))
 
 // Tô màu vùng theo ĐÚNG 'description' mà API trả về cho từng hàng.
 // Số suất dự cúp châu Âu khác nhau mỗi giải & mỗi mùa (vd PL 2025/26 có 5 suất C1),
@@ -124,7 +132,10 @@ function goPlayer(id) {
 
 <template>
   <a href="#" class="back" @click.prevent="$router.back()">{{ $t('backHome') }}</a>
-  <h1 class="page-title">{{ leagueName }}</h1>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <h1 class="page-title" style="margin:0">{{ leagueName }}</h1>
+    <FavButton type="league" :item="leagueItem" />
+  </div>
 
   <div class="tabs">
     <button class="tab" :class="{ active: tab === 'standings' }" @click="tab = 'standings'">{{ $t('tab_standings') }}</button>

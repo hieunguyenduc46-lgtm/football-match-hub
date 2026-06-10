@@ -107,6 +107,8 @@ export const messages = {
     following: 'Đang theo dõi',
     teamsLabel: 'Đội bóng',
     playersLabel: 'Cầu thủ',
+    leaguesLabel: 'Giải đấu',
+    matchesLabel: 'Trận đấu',
     emptyFav: 'Chưa theo dõi gì cả. Vào trang một đội hoặc cầu thủ rồi bấm ☆ Theo dõi nhé.',
     view: 'Xem ›',
     // fav button
@@ -230,6 +232,8 @@ export const messages = {
     following: 'Following',
     teamsLabel: 'Teams',
     playersLabel: 'Players',
+    leaguesLabel: 'Leagues',
+    matchesLabel: 'Matches',
     emptyFav: 'Nothing followed yet. Open a team or player page and tap ☆ Follow.',
     view: 'View ›',
     follow: 'Follow',
