@@ -61,6 +61,12 @@ onMounted(syncTeam)
 watch(() => route.params.id, syncTeam)
 onActivated(() => { if (route.name === 'team') setTitle(team.value ? teamName(team.value.team.name) : null) })
 
+// Tỉ số luân lưu (nếu có) -> hiện thêm cạnh tỉ số để biết đội nào thắng khi hoà.
+function penStr(m) {
+  const p = m?.score?.penalty
+  return (p && p.home != null && p.away != null) ? `${p.home}-${p.away}` : null
+}
+
 function goMatch(id) { router.push({ name: 'match', params: { id } }) }
 </script>
 
@@ -116,7 +122,7 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
       >
         <span class="muted" style="font-size:12px">{{ matchDay(m.fixture.date) }}</span>
         <span style="font-size:14px">{{ teamName(m.teams.home.name) }} v {{ teamName(m.teams.away.name) }}</span>
-        <strong>{{ m.goals.home }}-{{ m.goals.away }}</strong>
+        <strong>{{ m.goals.home }}-{{ m.goals.away }}<span v-if="penStr(m)" style="font-size:11px;font-weight:600;color:var(--text-dim);margin-left:3px">(p {{ penStr(m) }})</span></strong>
       </div>
     </template>
 

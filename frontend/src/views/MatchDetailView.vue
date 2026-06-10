@@ -93,6 +93,14 @@ const matchItem = computed(() => {
   }
 })
 
+// Tỉ số loạt LUÂN LƯU (nếu trận phân thắng bại bằng penalty). API-Football để ở
+// score.penalty = {home, away}; chỉ có giá trị khi thật sự đá luân lưu -> dùng để
+// hiện ai thắng khi tỉ số chính hoà (vd Chung kết C1 1-1 rồi pen 4-5). Không có -> null.
+const penaltyScore = computed(() => {
+  const p = fixture.value?.score?.penalty
+  return (p && p.home != null && p.away != null) ? `${p.home} - ${p.away}` : null
+})
+
 let loadSeq = 0
 async function loadMatch() {
   const seq = ++loadSeq
@@ -235,6 +243,8 @@ onUnmounted(() => clearInterval(timer))
           <span v-else-if="isOff(fixture.fixture.status.short)" style="color:var(--live)">{{ $t(offStatusKey(fixture.fixture.status.short)) }}</span>
           <span v-else>{{ $t('notStarted') }}</span>
         </div>
+        <!-- Tỉ số luân lưu (chỉ hiện khi trận đá penalty) -> biết đội nào thắng khi hoà. -->
+        <div v-if="penaltyScore" class="pen-score">{{ $t('penalties') }} {{ penaltyScore }}</div>
       </div>
 
       <router-link :to="{ name: 'team', params: { id: fixture.teams.away.id } }" style="text-align:center; width:38%;">
@@ -319,4 +329,5 @@ onUnmounted(() => clearInterval(timer))
 .gs-name.link:hover { color: var(--accent); text-decoration: underline; }
 .gs-min { color: var(--text-dim); font-weight: 700; }
 .gs-tag { color: var(--text-dim); font-size: 11px; }
+.pen-score { margin-top: 3px; font-size: 13px; font-weight: 700; color: var(--accent-2); }
 </style>

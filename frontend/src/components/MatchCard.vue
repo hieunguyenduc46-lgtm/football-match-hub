@@ -23,6 +23,11 @@ const finished = computed(() => isFinished(props.fixture.fixture.status.short) |
 // Trận bị huỷ/hoãn -> hiện nhãn riêng thay vì giờ đá (tránh tưởng nhầm "sắp đá").
 const off = computed(() => isOff(props.fixture.fixture.status.short))
 const offLabel = computed(() => offStatusKey(props.fixture.fixture.status.short))
+// Tỉ số luân lưu (nếu trận đá penalty) -> hiện số nhỏ cạnh tỉ số mỗi đội để biết ai thắng khi hoà.
+const pen = computed(() => {
+  const p = props.fixture?.score?.penalty
+  return (p && p.home != null && p.away != null) ? p : null
+})
 
 function open() {
   router.push({ name: 'match', params: { id: props.fixture.fixture.id } })
@@ -63,8 +68,8 @@ function open() {
 
     <!-- Tỉ số (ẩn nếu chưa đá) -->
     <div class="match-card__score" v-if="f.goals.home !== null">
-      <div class="g">{{ f.goals.home }}</div>
-      <div class="g">{{ f.goals.away }}</div>
+      <div class="g">{{ f.goals.home }}<span v-if="pen" class="pmini">({{ pen.home }})</span></div>
+      <div class="g">{{ f.goals.away }}<span v-if="pen" class="pmini">({{ pen.away }})</span></div>
     </div>
   </div>
 </template>
@@ -72,4 +77,5 @@ function open() {
 <style scoped>
 .mc-date { font-size: 11px; color: var(--text-dim); margin-bottom: 2px; white-space: nowrap; }
 .mc-off { font-size: 12px; font-weight: 700; color: var(--live); white-space: nowrap; }
+.pmini { font-size: 11px; font-weight: 600; color: var(--text-dim); margin-left: 2px; }
 </style>
