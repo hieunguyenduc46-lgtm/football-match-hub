@@ -35,9 +35,10 @@ async def list_fixtures(date: Optional[str] = None, league: Optional[int] = None
 
 
 @router.get("/leagues/{league_id}/fixtures")
-async def league_fixtures(league_id: int):
-    """Trận gần đây (kết quả) + sắp tới của 1 giải. Cho tab 'Lịch đấu' ở trang giải."""
-    return await api_football.get_league_fixtures(league_id)
+async def league_fixtures(league_id: int, season: Optional[int] = None):
+    """Trận gần đây (kết quả) + sắp tới của 1 giải. Cho tab 'Lịch đấu' ở trang giải.
+    season: lấy theo mùa đang chọn; không truyền -> trận mới nhất (live)."""
+    return await api_football.get_league_fixtures(league_id, season=season)
 
 
 @router.get("/country/{name}/fixtures")
@@ -47,9 +48,16 @@ async def country_fixtures(name: str):
 
 
 @router.get("/leagues/{league_id}/bracket")
-async def league_bracket(league_id: int):
-    """Các trận vòng knockout của giải -> client dựng sơ đồ nhánh đấu. [] nếu không có."""
-    return {"response": await api_football.get_bracket(league_id)}
+async def league_bracket(league_id: int, season: Optional[int] = None):
+    """Các trận vòng knockout của giải -> client dựng sơ đồ nhánh đấu. [] nếu không có.
+    season: mùa muốn xem (không truyền -> mùa mặc định theo giải)."""
+    return {"response": await api_football.get_bracket(league_id, season)}
+
+
+@router.get("/leagues/{league_id}/seasons")
+async def league_seasons(league_id: int):
+    """Danh sách mùa giải có dữ liệu (cho ô chọn mùa ở trang giải)."""
+    return {"response": await api_football.get_league_seasons(league_id)}
 
 
 @router.get("/_debug/fixtures")

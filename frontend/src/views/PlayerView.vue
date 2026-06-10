@@ -5,6 +5,7 @@ import api from '../services/api'
 import { imgFallback } from '../utils/format'
 import { splitStats, totalsOf } from '../utils/playerStats'
 import { setTitle } from '../utils/title'
+import { t } from '../i18n'
 import FavButton from '../components/FavButton.vue'
 
 const route = useRoute()
@@ -35,6 +36,16 @@ const clubTeamName = computed(() => {
   const rows = clubRows.value
   if (!rows.length) return ''
   return rows.reduce((b, r) => (r.apps > b.apps ? r : b), rows[0]).team
+})
+
+// Vị trí thi đấu. LƯU Ý: API chỉ trả nhóm TỔNG QUÁT (Attacker/Midfielder/Defender/Goalkeeper),
+// KHÔNG có vị trí cụ thể (CF/RW...). Lấy vị trí ở dòng có nhiều trận nhất rồi dịch VI/EN.
+const POS_KEY = { Attacker: 'pos_fw', Midfielder: 'pos_mf', Defender: 'pos_df', Goalkeeper: 'pos_gk' }
+const positionLabel = computed(() => {
+  const rows = [...clubRows.value, ...nationalRows.value].filter((r) => r.position)
+  if (!rows.length) return ''
+  const main = rows.reduce((b, r) => (r.apps > b.apps ? r : b), rows[0])
+  return POS_KEY[main.position] ? t(POS_KEY[main.position]) : main.position
 })
 
 function hideImg(e) { e.target.style.display = 'none' }
@@ -118,6 +129,7 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
         <div class="meta">
           {{ player.age }} {{ $t('years') }} · {{ player.nationality }}
           <span v-if="clubTeamName"> · {{ clubTeamName }}</span>
+          <span v-if="positionLabel"> · {{ positionLabel }}</span>
         </div>
         <div class="meta" v-if="heightStr || weightStr">{{ heightStr }} · {{ weightStr }}</div>
         <div style="margin-top:8px">

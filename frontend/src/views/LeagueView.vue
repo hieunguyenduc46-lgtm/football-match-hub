@@ -29,39 +29,56 @@ const tab = ref('standings') // 'standings' | 'scorers' | 'fixtures'
 const fixtures = ref({ recent: [], upcoming: [] })
 const fxLoading = ref(false)
 let fxLoadedId = null
-async function loadFixtures(id) {
-  if (!id || fxLoadedId === id) return
-  fxLoadedId = id
+async function loadFixtures(id, yr) {
+  const key = `${id}:${yr || ''}`
+  if (!id || fxLoadedId === key) return
+  fxLoadedId = key
   fxLoading.value = true
   fixtures.value = { recent: [], upcoming: [] }
   try {
-    const { data } = await api.get(`/leagues/${id}/fixtures`)
-    if (fxLoadedId === id) fixtures.value = { recent: data.recent || [], upcoming: data.upcoming || [] }
+    const { data } = await api.get(`/leagues/${id}/fixtures`, { params: yr ? { season: yr } : {} })
+    if (fxLoadedId === key) fixtures.value = { recent: data.recent || [], upcoming: data.upcoming || [] }
   } finally {
-    if (fxLoadedId === id) fxLoading.value = false
+    if (fxLoadedId === key) fxLoading.value = false
   }
 }
 const hasFixtures = computed(() => fixtures.value.recent.length || fixtures.value.upcoming.length)
-watch(tab, (v) => { if (v === 'fixtures') loadFixtures(route.params.id) })
+watch(tab, (v) => { if (v === 'fixtures') loadFixtures(route.params.id, season.value) })
+
+// ===== Chọn MÙA / KỲ (WC 2022 vs 2026, C1 24/25 vs 25/26...) =====
+const seasons = ref([])      // [{year, current}] để đổ vào dropdown
+const season = ref(null)     // mùa đang chọn; null = để backend tự chọn mặc định
+// Giải đấu ĐTQG / theo năm dương lịch -> nhãn 1 năm ("2022"); còn lại nhãn vắt mùa ("2025/26").
+const SINGLE_YEAR = new Set([1, 4, 9, 5, 6, 7, 10, 15, 253, 22, 21])
+function seasonLabel(yr) {
+  if (SINGLE_YEAR.has(Number(route.params.id))) return String(yr)
+  return `${yr}/${String(yr + 1).slice(-2)}`
+}
+function seasonParams(id) {
+  const p = { league: id }
+  if (season.value) p.season = season.value
+  return p
+}
 
 // Nhánh đấu (tab 'bracket') — chỉ với giải có knockout; tải LƯỜI khi mở tab.
 const showBracketTab = computed(() => BRACKET_LEAGUES.has(Number(route.params.id)))
 const bracket = ref([])
 const brLoading = ref(false)
 let brLoadedId = null
-async function loadBracket(id) {
-  if (!id || brLoadedId === id) return
-  brLoadedId = id
+async function loadBracket(id, yr) {
+  const key = `${id}:${yr || ''}`
+  if (!id || brLoadedId === key) return
+  brLoadedId = key
   brLoading.value = true
   bracket.value = []
   try {
-    const { data } = await api.get(`/leagues/${id}/bracket`)
-    if (brLoadedId === id) bracket.value = data.response || []
+    const { data } = await api.get(`/leagues/${id}/bracket`, { params: yr ? { season: yr } : {} })
+    if (brLoadedId === key) bracket.value = data.response || []
   } finally {
-    if (brLoadedId === id) brLoading.value = false
+    if (brLoadedId === key) brLoading.value = false
   }
 }
-watch(tab, (v) => { if (v === 'bracket') loadBracket(route.params.id) })
+watch(tab, (v) => { if (v === 'bracket') loadBracket(route.params.id, season.value) })
 
 // standings = mảng các "bảng" (giải thường: 1 bảng; World Cup: 8 bảng A–H).
 const groups = computed(() => raw.value?.league?.standings || [])
@@ -86,17 +103,14 @@ function zoneByDesc(desc) {
   return '' // play-off / vòng loại khác -> không tô
 }
 
-// Fallback khi API không kèm 'description' (vd dữ liệu mock): top 4 = C1, 3 cuối = rớt hạng.
-function zoneByRank(rank, n) {
-  if (n < 8) return ''
-  if (rank <= 4) return 'zone-cl'
-  if (rank > n - 3) return 'zone-rel'
-  return ''
-}
+// Chỉ tô vùng C1/C2/C3/rớt hạng cho 5 giải VĐQG lớn châu Âu — nơi các nhãn này ĐÚNG.
+// Giải khác (V-League, cúp, AFC...) description hay là "Champions League 2"... -> nếu map sẽ
+// ra nhãn châu Âu sai/buồn cười, nên KHÔNG tô vùng cho chúng (hiện BXH thường, sạch).
+const ZONE_LEAGUES = new Set([39, 140, 135, 78, 61])
 
-// Bảng có ít nhất 1 hàng kèm description -> dùng dữ liệu thật; nếu không -> fallback theo thứ hạng.
 function zone(row, g) {
-  return g.some((r) => r.description) ? zoneByDesc(row.description) : zoneByRank(row.rank, g.length)
+  if (!ZONE_LEAGUES.has(Number(route.params.id))) return ''
+  return zoneByDesc(row.description)
 }
 
 // Chú thích động: chỉ hiện những vùng thực sự có trong bảng.
@@ -113,6 +127,25 @@ const legendZones = computed(() => {
 })
 
 let loadSeq = 0
+
+// Tải BXH + vua phá lưới theo mùa đang chọn (season.value). Tách riêng để đổi mùa gọi lại được.
+async function loadStandingsScorers(id, seq) {
+  try {
+    const [sRes, tsRes] = await Promise.all([
+      api.get('/standings', { params: seasonParams(id) }),
+      api.get('/topscorers', { params: seasonParams(id) }),
+    ])
+    if (seq !== loadSeq) return                   // đã chuyển sang giải/mùa khác
+    raw.value = sRes.data.response?.[0] || null
+    scorers.value = tsRes.data.response || []
+    // Chưa chọn mùa -> lấy mùa mặc định backend trả về để hiện trong dropdown.
+    if (!season.value && raw.value?.league?.season) season.value = raw.value.league.season
+    setTitle(leagueName.value)
+  } finally {
+    if (seq === loadSeq) loading.value = false
+  }
+}
+
 async function loadLeague(id) {
   const seq = ++loadSeq
   loading.value = true
@@ -122,37 +155,48 @@ async function loadLeague(id) {
   fixtures.value = { recent: [], upcoming: [] }
   brLoadedId = null
   bracket.value = []
-  if (tab.value === 'fixtures') loadFixtures(id)
-  if (tab.value === 'bracket') loadBracket(id)
-  try {
-    // Không cố định season nữa: để backend tự chọn mùa đúng theo giải
-    // (vd World Cup -> 2026, VĐQG -> 2025).
-    const [sRes, tsRes] = await Promise.all([
-      api.get('/standings', { params: { league: id } }),
-      api.get('/topscorers', { params: { league: id } }),
-    ])
-    if (seq !== loadSeq) return                   // đã chuyển sang giải khác
-    raw.value = sRes.data.response?.[0] || null
-    scorers.value = tsRes.data.response || []
-    setTitle(leagueName.value)                    // tiêu đề tab = tên giải
-  } finally {
-    if (seq === loadSeq) loading.value = false
-  }
+  // Mùa khởi tạo: lấy từ URL (?season=...) khi đi từ 1 trận sang; nếu không -> để backend mặc định.
+  season.value = Number(route.query.season) || null
+  seasons.value = []
+  api.get(`/leagues/${id}/seasons`).then(({ data }) => { if (seq === loadSeq) seasons.value = data.response || [] }).catch(() => {})
+  if (tab.value === 'fixtures') loadFixtures(id, season.value)
+  if (tab.value === 'bracket') loadBracket(id, season.value)
+  await loadStandingsScorers(id, seq)
+}
+
+// Đổi mùa từ dropdown -> tải lại BXH/vua phá lưới/lịch đấu/nhánh đấu theo mùa mới.
+function changeSeason(yr) {
+  const id = route.params.id
+  season.value = Number(yr) || null
+  const seq = ++loadSeq
+  loading.value = true
+  raw.value = null
+  scorers.value = []
+  loadStandingsScorers(id, seq)
+  fxLoadedId = null
+  fixtures.value = { recent: [], upcoming: [] }
+  if (tab.value === 'fixtures') loadFixtures(id, season.value)
+  brLoadedId = null
+  bracket.value = []
+  if (tab.value === 'bracket') loadBracket(id, season.value)
 }
 
 // keep-alive: component bị cache, KHÔNG remount. Chỉ tải lại khi đây đúng là trang đang
 // xem (route.name === 'league') VÀ là giải khác giải đã tải -> tránh tải nhầm khi bị cache,
 // và tránh tải lại (mất vị trí cuộn) khi back về đúng giải cũ.
-let loadedId = null
+let loadedKey = null
 function syncLeague() {
   if (route.name !== 'league') return
   const id = route.params.id
-  if (!id || id === loadedId) return
-  loadedId = id
+  if (!id) return
+  // Khoá theo id + mùa ở URL: đổi giải HOẶC đổi ?season (đi từ trận khác mùa) -> tải lại.
+  const key = `${id}:${route.query.season || ''}`
+  if (key === loadedKey) return
+  loadedKey = key
   loadLeague(id)
 }
 onMounted(syncLeague)
-watch(() => route.params.id, syncLeague)
+watch(() => [route.params.id, route.query.season], syncLeague)
 onActivated(() => { if (route.name === 'league') setTitle(leagueName.value) })
 
 function goPlayer(id) {
@@ -172,6 +216,14 @@ function goPlayer(id) {
     <button class="tab" :class="{ active: tab === 'fixtures' }" @click="tab = 'fixtures'">{{ $t('tab_fixtures') }}</button>
     <button v-if="showBracketTab" class="tab" :class="{ active: tab === 'bracket' }" @click="tab = 'bracket'">{{ $t('tab_bracket') }}</button>
     <button class="tab" :class="{ active: tab === 'scorers' }" @click="tab = 'scorers'">{{ $t('tab_scorers') }}</button>
+  </div>
+
+  <!-- Chọn mùa / kỳ -->
+  <div v-if="seasons.length" class="filter-row" style="margin-top:10px">
+    <label class="muted" style="font-size:13px">{{ $t('seasonLabel') }}</label>
+    <select class="league-select" :value="season" @change="changeSeason($event.target.value)">
+      <option v-for="s in seasons" :key="s.year" :value="s.year">{{ seasonLabel(s.year) }}</option>
+    </select>
   </div>
 
   <!-- Nhánh đấu (knockout) -->

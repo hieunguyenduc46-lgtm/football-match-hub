@@ -548,11 +548,24 @@ async def get_all_leagues() -> list:
     return out
 
 
-async def get_league_fixtures(league_id: int, last: int = 12, nxt: int = 12) -> dict:
+async def get_league_fixtures(league_id: int, last: int = 12, nxt: int = 12,
+                              season: Optional[int] = None) -> dict:
     """Trận GẦN ĐÂY (kết quả) + SẮP TỚI của 1 giải. Dùng cho tab 'Lịch đấu' của trang giải.
-    last/next không cần kèm season nên không lo chọn nhầm mùa."""
+    season: nếu truyền -> lấy theo MÙA đó (đã đá xếp mới->cũ, sắp đá xếp cũ->mới) để khớp
+    với mùa đang chọn. Không truyền -> kiểu 'live' (last/next, trận mới nhất bất kể mùa)."""
     if settings.use_mock:
         return {"recent": mock_data.fixtures_for(None, league_id), "upcoming": []}
+    if season:
+        fx = (await _request("/fixtures", {"league": league_id, "season": season},
+                             ttl=STATIC_TTL)).get("response", [])
+        done = {"FT", "AET", "PEN", "WO", "AWD"}
+        def _d(f):
+            return (f.get("fixture") or {}).get("date") or ""
+        def _st(f):
+            return ((f.get("fixture") or {}).get("status") or {}).get("short")
+        recent = sorted([f for f in fx if _st(f) in done], key=_d, reverse=True)
+        upcoming = sorted([f for f in fx if _st(f) in ("NS", "TBD")], key=_d)
+        return {"recent": recent[:20], "upcoming": upcoming[:20]}
     recent = (await _request("/fixtures", {"league": league_id, "last": last},
                              ttl=STATIC_TTL)).get("response", [])
     upcoming = (await _request("/fixtures", {"league": league_id, "next": nxt},
@@ -560,13 +573,28 @@ async def get_league_fixtures(league_id: int, last: int = 12, nxt: int = 12) -> 
     return {"recent": recent, "upcoming": upcoming}
 
 
-async def get_bracket(league_id: int) -> list:
-    """Các trận VÒNG LOẠI TRỰC TIẾP (knockout) của giải, mùa hiện tại -> client dựng SƠ ĐỒ
-    NHÁNH ĐẤU. Trả [] nếu giải không có vòng knockout (vd VĐQG) -> client ẩn tab.
+async def get_league_seasons(league_id: int) -> list:
+    """Danh sách MÙA mà giải có dữ liệu (để client đổ vào ô chọn mùa). Trả [{year, current}]
+    sắp xếp mùa mới -> cũ. Cache 24h. [] nếu mock."""
+    if settings.use_mock:
+        return []
+    data = await _request("/leagues", {"id": league_id}, ttl=LEAGUES_TTL)
+    resp = data.get("response", [])
+    seasons = resp[0].get("seasons", []) if resp else []
+    out = [{"year": s.get("year"), "current": bool(s.get("current"))}
+           for s in seasons if isinstance(s.get("year"), int)]
+    out.sort(key=lambda x: x["year"], reverse=True)
+    return out
+
+
+async def get_bracket(league_id: int, season: Optional[int] = None) -> list:
+    """Các trận VÒNG LOẠI TRỰC TIẾP (knockout) của giải -> client dựng SƠ ĐỒ NHÁNH ĐẤU.
+    Trả [] nếu giải không có vòng knockout (vd VĐQG) -> client ẩn tab.
+    season: mùa muốn xem; không truyền -> mùa mặc định theo giải.
     1 request /fixtures?league&season (cache 6h) rồi lọc theo tên vòng."""
     if settings.use_mock:
         return []
-    season = config.season_for(league_id)
+    season = season or config.season_for(league_id)
     data = await _request("/fixtures", {"league": league_id, "season": season}, ttl=STATIC_TTL)
     out = []
     for f in data.get("response", []):
