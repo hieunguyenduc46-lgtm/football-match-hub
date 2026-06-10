@@ -1,6 +1,6 @@
 // Service worker tối giản: cache app shell để mở offline được.
 // Chỉ đăng ký ở bản production (xem main.js) nên không ảnh hưởng dev.
-const CACHE = 'fmh-v1'
+const CACHE = 'fmh-v2'
 const SHELL = ['/', '/index.html', '/icon.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (e) => {
@@ -22,6 +22,10 @@ self.addEventListener('fetch', (e) => {
 
   // Không cache API -> luôn lấy dữ liệu mới.
   if (url.pathname.startsWith('/api')) return
+
+  // Không cache route nội bộ Vercel (/_vercel/insights/* của Web Analytics):
+  // nếu cache-first sẽ giữ bản cũ/hỏng -> script analytics không nạp đúng.
+  if (url.pathname.startsWith('/_vercel')) return
 
   // Điều hướng trang: ưu tiên mạng, offline thì trả index.html.
   if (request.mode === 'navigate') {
