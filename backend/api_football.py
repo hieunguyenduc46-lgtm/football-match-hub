@@ -465,11 +465,37 @@ async def get_events(fixture_id: int) -> list:
     return data.get("response", [])
 
 
+def _has_match_detail(entry: dict) -> bool:
+    """True nếu dòng thống kê có dữ liệu CẤP TRẬN (phút thi đấu hoặc điểm số).
+    Scorer thật của VCK có phút/điểm; số liệu vòng loại bị gộp nhầm thì null hết."""
+    try:
+        g = entry["statistics"][0]["games"]
+    except (KeyError, IndexError, TypeError):
+        return False
+    return g.get("minutes") is not None or g.get("rating") is not None
+
+
+def _drop_qualifier_leak(resp: list) -> list:
+    """API-Football đôi khi GỘP số liệu VÒNG LOẠI vào vua phá lưới của giải đấu cúp.
+    Ví dụ World Cup 2018: Immobile (Ý) đứng đầu với 6 bàn dù Ý không dự VCK — đó là
+    bàn ở vòng loại. Các dòng "lọt" này không có dữ liệu cấp trận (phút/điểm = null).
+
+    Quy tắc AN TOÀN: chỉ bỏ dòng rỗng KHI danh sách có CẢ dòng chi tiết lẫn dòng rỗng
+    (đặc trưng của giải đấu cúp). Nếu TẤT CẢ đều rỗng (giải ít dữ liệu như V-League)
+    thì giữ nguyên để không xoá trắng bảng."""
+    if not resp:
+        return resp
+    detailed = [p for p in resp if _has_match_detail(p)]
+    if detailed and len(detailed) < len(resp):
+        return detailed
+    return resp
+
+
 async def get_topscorers(league: int, season: int = 2025) -> list:
     if settings.use_mock:
         return mock_data.topscorers_for(league)
     data = await _request("/players/topscorers", {"league": league, "season": season}, ttl=STATIC_TTL)
-    return data.get("response", [])
+    return _drop_qualifier_leak(data.get("response", []))
 
 
 async def get_statistics(fixture_id: int) -> list:
