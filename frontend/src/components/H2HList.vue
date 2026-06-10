@@ -34,11 +34,11 @@ const summary = computed(() => {
     <div v-for="m in matches" :key="m.fixture.id" class="h2h-row">
       <span class="dt">{{ matchDay(m.fixture.date) }}</span>
       <span class="side">
-        <img :src="m.teams.home.logo" @error="imgFallback" />{{ teamName(m.teams.home.name) }}
+        <img loading="lazy" :src="m.teams.home.logo" @error="imgFallback" />{{ teamName(m.teams.home.name) }}
       </span>
       <span class="sc">{{ m.goals.home }} - {{ m.goals.away }}</span>
       <span class="side right">
-        {{ teamName(m.teams.away.name) }}<img :src="m.teams.away.logo" @error="imgFallback" />
+        {{ teamName(m.teams.away.name) }}<img loading="lazy" :src="m.teams.away.logo" @error="imgFallback" />
       </span>
     </div>
   </div>

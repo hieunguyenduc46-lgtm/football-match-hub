@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
 import { state } from '../i18n'
 import { imgFallback } from '../utils/format'
+import { setTitle } from '../utils/title'
 import { COUNTRY_VI, teamName } from '../utils/countryNames'
 import { leagueName } from '../utils/leagueNames'
 import { ensureIndex, leaguesByCountry } from '../utils/searchIndex'
@@ -47,10 +48,12 @@ async function loadDomestic(name) {
 
 function sync() {
   const name = countryEn.value
+  setTitle(title.value)        // tiêu đề tab = tên quốc gia
   loadDomestic(name)
   if (tab.value === 'national') loadNational(name)
 }
 onMounted(sync)
+onActivated(() => { if (route.name === 'country') setTitle(title.value) })
 watch(() => route.params.name, () => {
   natLoadedFor = null
   tab.value = 'national'
@@ -76,7 +79,7 @@ watch(tab, (v) => { if (v === 'national') loadNational(countryEn.value) })
     <div v-else-if="!nat.team" class="center">{{ $t('countryNotFound') }}</div>
     <template v-else>
       <div class="country-team" v-if="nat.team">
-        <img :src="nat.team.logo" @error="imgFallback" />
+        <img loading="lazy" :src="nat.team.logo" @error="imgFallback" />
         <span>{{ teamName(nat.team.name) }}</span>
       </div>
       <div v-if="!hasNat" class="center">{{ $t('noRecent') }}</div>
@@ -103,7 +106,7 @@ watch(tab, (v) => { if (v === 'national') loadNational(countryEn.value) })
         class="match-card country-league"
         :to="{ name: 'league', params: { id: l.id } }"
       >
-        <img :src="l.logo" @error="imgFallback" />
+        <img loading="lazy" :src="l.logo" @error="imgFallback" />
         <span class="cl-name">{{ leagueName(l.name, l.id) }}</span>
         <span class="cl-type">{{ l.type }}</span>
       </router-link>

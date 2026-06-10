@@ -25,7 +25,7 @@ const { teams, players } = storeToRefs(fav)
         class="match-card"
         style="grid-template-columns:40px 1fr auto"
       >
-        <img :src="t.logo" @error="imgFallback" style="width:30px;height:30px;object-fit:contain" />
+        <img loading="lazy" :src="t.logo" @error="imgFallback" style="width:30px;height:30px;object-fit:contain" />
         <span style="font-weight:600">{{ t.name }}</span>
         <span class="muted" style="font-size:13px">{{ $t('view') }}</span>
       </router-link>
@@ -40,7 +40,7 @@ const { teams, players } = storeToRefs(fav)
         class="match-card"
         style="grid-template-columns:40px 1fr auto"
       >
-        <img :src="p.photo" @error="imgFallback" style="width:30px;height:30px;border-radius:50%;object-fit:cover" />
+        <img loading="lazy" :src="p.photo" @error="imgFallback" style="width:30px;height:30px;border-radius:50%;object-fit:cover" />
         <span style="font-weight:600">{{ p.name }}</span>
         <span class="muted" style="font-size:13px">{{ $t('view') }}</span>
       </router-link>

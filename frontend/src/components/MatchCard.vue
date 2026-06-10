@@ -52,11 +52,11 @@ function open() {
     <!-- Hai đội -->
     <div class="match-card__teams">
       <div class="team-row" :class="{ winner: f.teams.home.winner, loser: finished && !f.teams.home.winner && f.teams.home.winner !== null }">
-        <img :src="f.teams.home.logo" :alt="f.teams.home.name" @error="imgFallback" />
+        <img loading="lazy" :src="f.teams.home.logo" :alt="f.teams.home.name" @error="imgFallback" />
         <span class="name">{{ teamName(f.teams.home.name) }}</span>
       </div>
       <div class="team-row" :class="{ winner: f.teams.away.winner, loser: finished && !f.teams.away.winner && f.teams.away.winner !== null }">
-        <img :src="f.teams.away.logo" :alt="f.teams.away.name" @error="imgFallback" />
+        <img loading="lazy" :src="f.teams.away.logo" :alt="f.teams.away.name" @error="imgFallback" />
         <span class="name">{{ teamName(f.teams.away.name) }}</span>
       </div>
     </div>

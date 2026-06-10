@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import HomeView from '../views/HomeView.vue'
+import { setTitle } from '../utils/title'
+import { t } from '../i18n'
 
 // Lazy-load các trang ít dùng hơn để bundle nhẹ.
 const routes = [
@@ -15,7 +17,7 @@ const routes = [
   { path: '/compare', name: 'compare', component: () => import('../views/CompareView.vue') },
 ]
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(),
   routes,
   // Vào trang mới -> lên đầu.
@@ -39,3 +41,17 @@ export default createRouter({
     })
   },
 })
+
+// Tiêu đề tab theo trang. Trang TĨNH set ngay; trang ĐỘNG (player/team/league/match/country)
+// set mặc định ở đây rồi được chính view ghi đè bằng tên cụ thể khi tải xong dữ liệu.
+router.afterEach((to) => {
+  const titles = {
+    home: null,
+    matches: t('matchesFor'),
+    favorites: t('following'),
+    compare: t('compareTitle'),
+  }
+  setTitle(to.name in titles ? titles[to.name] : null)
+})
+
+export default router

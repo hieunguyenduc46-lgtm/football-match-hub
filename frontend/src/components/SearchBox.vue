@@ -150,7 +150,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onClickOutside); c
           @pointerdown.prevent="go({ type: 'country', data: c })"
           @mousemove="active = i"
         >
-          <img v-if="c.flag" :src="c.flag" class="round" @error="imgFallback" />
+          <img v-if="c.flag" loading="lazy" :src="c.flag" class="round" @error="imgFallback" />
           <span v-else class="sbox-flag">🏳️</span>
           <span class="sbox-name">{{ countryLabel(c) }}</span>
           <span class="sbox-meta">{{ c.count }} {{ wordLeagues }}</span>
@@ -167,7 +167,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onClickOutside); c
           @pointerdown.prevent="go({ type: 'league', data: l })"
           @mousemove="active = nc + j"
         >
-          <img :src="l.logo" @error="imgFallback" />
+          <img loading="lazy" :src="l.logo" @error="imgFallback" />
           <span class="sbox-name">{{ leagueName(l.name, l.id) }}</span>
           <span class="sbox-meta">{{ teamName(l.country) }}</span>
         </div>

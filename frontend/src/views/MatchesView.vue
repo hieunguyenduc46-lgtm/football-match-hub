@@ -46,12 +46,12 @@ watch(() => route.query.q, syncSearch)
 
   <!-- Tiêu đề: A vs B hoặc 1 đội -->
   <div v-if="data && data.mode === 'h2h' && data.teamA && data.teamB" class="ms-head">
-    <span class="ms-team"><img :src="data.teamA.logo" @error="imgFallback" />{{ teamName(data.teamA.name) }}</span>
+    <span class="ms-team"><img loading="lazy" :src="data.teamA.logo" @error="imgFallback" />{{ teamName(data.teamA.name) }}</span>
     <span class="ms-vs">vs</span>
-    <span class="ms-team"><img :src="data.teamB.logo" @error="imgFallback" />{{ teamName(data.teamB.name) }}</span>
+    <span class="ms-team"><img loading="lazy" :src="data.teamB.logo" @error="imgFallback" />{{ teamName(data.teamB.name) }}</span>
   </div>
   <div v-else-if="data && data.mode === 'team' && data.team" class="ms-head">
-    <span class="ms-team"><img :src="data.team.logo" @error="imgFallback" />{{ teamName(data.team.name) }}</span>
+    <span class="ms-team"><img loading="lazy" :src="data.team.logo" @error="imgFallback" />{{ teamName(data.team.name) }}</span>
   </div>
   <h1 v-else class="page-title">{{ $t('matchesFor') }}</h1>
 

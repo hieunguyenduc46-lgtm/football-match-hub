@@ -138,13 +138,13 @@ function toggleTheme() {
           <template v-if="results.teams.length">
             <div class="dd-label">{{ $t('teamsLabel') }}</div>
             <div v-for="t in results.teams" :key="'t' + t.id" class="dd-item" @pointerdown.prevent="goTeam(t.id)">
-              <img :src="t.logo" @error="imgFallback" /> {{ teamName(t.name) }}
+              <img loading="lazy" :src="t.logo" @error="imgFallback" /> {{ teamName(t.name) }}
             </div>
           </template>
           <template v-if="results.players.length">
             <div class="dd-label">{{ $t('playersLabel') }}</div>
             <div v-for="p in results.players" :key="'p' + p.id" class="dd-item" @pointerdown.prevent="goPlayer(p.id)">
-              <img :src="p.photo" @error="imgFallback" class="round" /> {{ p.name }}
+              <img loading="lazy" :src="p.photo" @error="imgFallback" class="round" /> {{ p.name }}
             </div>
           </template>
           <!-- Trạng thái: đang tìm / không có gợi ý -->

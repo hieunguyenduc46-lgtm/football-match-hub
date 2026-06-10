@@ -5,6 +5,7 @@ import api from '../services/api'
 import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, matchTime, matchDayYear, imgFallback } from '../utils/format'
 import { roundLabel } from '../utils/roundNames'
 import { leagueName } from '../utils/leagueNames'
+import { setTitle } from '../utils/title'
 import LineupPitch from '../components/LineupPitch.vue'
 import MatchTimeline from '../components/MatchTimeline.vue'
 import MatchStats from '../components/MatchStats.vue'
@@ -104,6 +105,7 @@ async function loadMatch() {
   if (seq !== loadSeq) return                     // đã chuyển sang trận khác
   if (fRes.status === 'fulfilled') fixture.value = fRes.value.data.response?.[0] || null
   else error.value = fRes.reason?.message || 'Không tải được trận đấu'
+  if (fixture.value) setTitle(`${teamName(fixture.value.teams.home.name)} - ${teamName(fixture.value.teams.away.name)}`)
   if (lRes.status === 'fulfilled') lineups.value = lRes.value.data.response || []
   if (eRes.status === 'fulfilled') events.value = eRes.value.data.response || []
   loading.value = false
@@ -143,7 +145,12 @@ function syncMatch() {
 }
 onMounted(syncMatch)
 watch(() => route.params.id, syncMatch)
-onActivated(() => { if (fixture.value) startTimer() })   // quay lại -> bật lại polling nếu cần
+onActivated(() => {
+  if (fixture.value) {
+    startTimer()                                           // quay lại -> bật lại polling nếu cần
+    setTitle(`${teamName(fixture.value.teams.home.name)} - ${teamName(fixture.value.teams.away.name)}`)
+  }
+})
 onDeactivated(() => clearInterval(timer))                // rời trang (vẫn bị cache) -> dừng polling
 
 async function refresh() {
@@ -195,7 +202,7 @@ onUnmounted(() => clearInterval(timer))
 
     <div style="display:flex; align-items:center; justify-content:space-around; padding:18px 0;">
       <router-link :to="{ name: 'team', params: { id: fixture.teams.home.id } }" style="text-align:center; width:38%;">
-        <img :src="fixture.teams.home.logo" @error="imgFallback" style="width:56px;height:56px;object-fit:contain" />
+        <img loading="lazy" :src="fixture.teams.home.logo" @error="imgFallback" style="width:56px;height:56px;object-fit:contain" />
         <div style="margin-top:8px;font-weight:600">{{ teamName(fixture.teams.home.name) }}</div>
         <div v-if="homeRank" class="rank-badge">#{{ homeRank }}</div>
       </router-link>
@@ -214,7 +221,7 @@ onUnmounted(() => clearInterval(timer))
       </div>
 
       <router-link :to="{ name: 'team', params: { id: fixture.teams.away.id } }" style="text-align:center; width:38%;">
-        <img :src="fixture.teams.away.logo" @error="imgFallback" style="width:56px;height:56px;object-fit:contain" />
+        <img loading="lazy" :src="fixture.teams.away.logo" @error="imgFallback" style="width:56px;height:56px;object-fit:contain" />
         <div style="margin-top:8px;font-weight:600">{{ teamName(fixture.teams.away.name) }}</div>
         <div v-if="awayRank" class="rank-badge">#{{ awayRank }}</div>
       </router-link>

@@ -207,7 +207,7 @@ onUnmounted(stopPolling)
   <div v-else>
     <section class="league-group" v-for="g in grouped" :key="g.league.id">
       <router-link class="league-group__head" :to="{ name: 'league', params: { id: g.league.id } }">
-        <img :src="g.league.logo" :alt="g.league.name" />
+        <img loading="lazy" :src="g.league.logo" :alt="g.league.name" />
         <span class="lg-name">{{ leagueName(g.league.name, g.league.id) }}</span>
         <span class="lg-hint">{{ $t('standingsHint') }} <span class="chev">›</span></span>
       </router-link>

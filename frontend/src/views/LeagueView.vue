@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../services/api'
 import { imgFallback } from '../utils/format'
+import { setTitle } from '../utils/title'
 import { t } from '../i18n'
 import { teamName } from '../utils/countryNames'
 import { leagueName as translateLeague } from '../utils/leagueNames'
@@ -95,6 +96,7 @@ async function loadLeague(id) {
     if (seq !== loadSeq) return                   // đã chuyển sang giải khác
     raw.value = sRes.data.response?.[0] || null
     scorers.value = tsRes.data.response || []
+    setTitle(leagueName.value)                    // tiêu đề tab = tên giải
   } finally {
     if (seq === loadSeq) loading.value = false
   }
@@ -113,6 +115,7 @@ function syncLeague() {
 }
 onMounted(syncLeague)
 watch(() => route.params.id, syncLeague)
+onActivated(() => { if (route.name === 'league') setTitle(leagueName.value) })
 
 function goPlayer(id) {
   if (id) router.push({ name: 'player', params: { id } })
@@ -165,7 +168,7 @@ function goPlayer(id) {
                 <td>{{ row.rank }}</td>
                 <td class="team-cell">
                   <router-link :to="{ name: 'team', params: { id: row.team.id } }" class="team-cell">
-                    <img :src="row.team.logo" @error="imgFallback" />{{ teamName(row.team.name) }}
+                    <img loading="lazy" :src="row.team.logo" @error="imgFallback" />{{ teamName(row.team.name) }}
                   </router-link>
                 </td>
                 <td>{{ row.all.played }}</td>
@@ -199,7 +202,7 @@ function goPlayer(id) {
         @click="goPlayer(s.player.id)"
       >
         <span class="muted" style="font-weight:700;text-align:center">{{ i + 1 }}</span>
-        <img :src="s.player.photo" @error="imgFallback" style="width:36px;height:36px;border-radius:50%;object-fit:cover" />
+        <img loading="lazy" :src="s.player.photo" @error="imgFallback" style="width:36px;height:36px;border-radius:50%;object-fit:cover" />
         <span>
           <div style="font-weight:600">{{ s.player.name }}</div>
           <div class="muted" style="font-size:12px">{{ teamName(s.statistics?.[0]?.team?.name || '') }}</div>

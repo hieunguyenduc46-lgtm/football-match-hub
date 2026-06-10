@@ -79,21 +79,21 @@ function goPlayer(id) {
       <div class="pitch__box pitch__box--bottom"></div>
 
       <div class="pitch__label pitch__label--top" v-if="away">
-        <img :src="away.team?.logo" @error="imgFallback" /> {{ teamName(away.team?.name) }}<span v-if="away.formation"> · {{ away.formation }}</span>
+        <img loading="lazy" :src="away.team?.logo" @error="imgFallback" /> {{ teamName(away.team?.name) }}<span v-if="away.formation"> · {{ away.formation }}</span>
       </div>
       <div class="pitch__label pitch__label--bottom" v-if="home">
-        {{ teamName(home.team?.name) }}<span v-if="home.formation"> · {{ home.formation }}</span> <img :src="home.team?.logo" @error="imgFallback" />
+        {{ teamName(home.team?.name) }}<span v-if="home.formation"> · {{ home.formation }}</span> <img loading="lazy" :src="home.team?.logo" @error="imgFallback" />
       </div>
 
       <!-- cầu thủ khách (trên) -->
       <div v-for="p in awayPlayers" :key="'a' + p.id" class="pp" :style="{ left: p.x + '%', top: p.y + '%' }" @click="goPlayer(p.id)">
-        <img :src="playerPhoto(p)" @error="imgFallback" />
+        <img loading="lazy" :src="playerPhoto(p)" @error="imgFallback" />
         <span class="num">{{ p.number }}</span>
         <span class="nm">{{ p.name }}</span>
       </div>
       <!-- cầu thủ nhà (dưới) -->
       <div v-for="p in homePlayers" :key="'h' + p.id" class="pp" :style="{ left: p.x + '%', top: p.y + '%' }" @click="goPlayer(p.id)">
-        <img :src="playerPhoto(p)" @error="imgFallback" />
+        <img loading="lazy" :src="playerPhoto(p)" @error="imgFallback" />
         <span class="num">{{ p.number }}</span>
         <span class="nm">{{ p.name }}</span>
       </div>
@@ -102,7 +102,7 @@ function goPlayer(id) {
     <!-- ghế dự bị + HLV -->
     <div class="subs-wrap">
       <div v-for="(t, idx) in lineups" :key="idx" class="subs-col">
-        <div class="subs-title"><img :src="t.team?.logo" @error="imgFallback" /> {{ $t('subs') }}</div>
+        <div class="subs-title"><img loading="lazy" :src="t.team?.logo" @error="imgFallback" /> {{ $t('subs') }}</div>
         <div v-for="s in (t.substitutes || [])" :key="s.player?.id" class="sub-row" @click="goPlayer(s.player?.id)">
           <span class="muted">#{{ s.player?.number }}</span> {{ s.player?.name }}
         </div>

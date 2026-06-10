@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../services/api'
 import { imgFallback, matchDay, matchTime } from '../utils/format'
+import { setTitle } from '../utils/title'
 import FavButton from '../components/FavButton.vue'
 import { teamName } from '../utils/countryNames'
 
@@ -39,6 +40,7 @@ async function loadTeam(id) {
   ])
   if (seq !== loadSeq) return                    // đã chuyển sang đội khác
   if (tRes.status === 'fulfilled') team.value = tRes.value.data.response?.[0] || null
+  setTitle(team.value ? teamName(team.value.team.name) : null)   // tiêu đề tab = tên đội
   if (fRes.status === 'fulfilled') recent.value = fRes.value.data.response || []
   if (uRes.status === 'fulfilled') upcoming.value = uRes.value.data.response || []
   loading.value = false
@@ -57,6 +59,7 @@ function syncTeam() {
 }
 onMounted(syncTeam)
 watch(() => route.params.id, syncTeam)
+onActivated(() => { if (route.name === 'team') setTitle(team.value ? teamName(team.value.team.name) : null) })
 
 function goMatch(id) { router.push({ name: 'match', params: { id } }) }
 </script>
@@ -69,7 +72,7 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
 
   <div v-else>
     <div class="player-hero">
-      <img :src="team.team.logo" class="photo" style="border-radius:12px" @error="imgFallback" />
+      <img loading="lazy" :src="team.team.logo" class="photo" style="border-radius:12px" @error="imgFallback" />
       <div>
         <h1>{{ teamName(team.team.name) }}</h1>
         <div class="meta">{{ team.venue?.name }} · {{ team.venue?.capacity?.toLocaleString() }} {{ $t('seats') }} · {{ $t('since') }} {{ team.team.founded }}</div>
@@ -126,7 +129,7 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
       class="match-card"
       style="grid-template-columns:44px 1fr auto"
     >
-      <img :src="p.photo" @error="imgFallback" style="width:36px;height:36px;border-radius:50%;object-fit:cover" />
+      <img loading="lazy" :src="p.photo" @error="imgFallback" style="width:36px;height:36px;border-radius:50%;object-fit:cover" />
       <span style="font-weight:600">{{ p.name }}</span>
       <span class="muted">#{{ p.number }} · {{ p.pos }}</span>
     </router-link>

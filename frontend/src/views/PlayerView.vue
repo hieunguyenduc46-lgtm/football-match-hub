@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
 import { imgFallback } from '../utils/format'
 import { splitStats, totalsOf } from '../utils/playerStats'
+import { setTitle } from '../utils/title'
 import FavButton from '../components/FavButton.vue'
 
 const route = useRoute()
@@ -11,6 +12,8 @@ const data = ref(null)
 const loading = ref(true)
 const career = ref(null)        // tổng bàn sự nghiệp (tải riêng, có thể chậm)
 const motm = ref(null)          // số lần hay nhất trận mùa này (tải riêng, quét fixtures)
+const careerLoading = ref(false) // đang tải thẻ tổng bàn -> hiện placeholder "Đang tính…"
+const motmLoading = ref(false)   // đang tải thẻ POTM -> hiện placeholder "Đang tính…"
 
 const player = computed(() => data.value?.player || null)
 
@@ -57,10 +60,13 @@ async function loadPlayer(id) {
   data.value = null
   career.value = null
   motm.value = null
+  careerLoading.value = true
+  motmLoading.value = true
   try {
     const res = await api.get(`/players/${id}`)
     if (seq !== loadSeq) return                  // đã chuyển sang cầu thủ khác
     data.value = res.data.response?.[0] || null
+    setTitle(data.value?.player?.name || null)   // tiêu đề tab = tên cầu thủ
   } finally {
     if (seq === loadSeq) loading.value = false
   }
@@ -70,12 +76,14 @@ async function loadPlayer(id) {
     const c = await api.get(`/players/${id}/career`, { timeout: 60000 })
     if (seq === loadSeq) career.value = c.data
   } catch (e) { /* bỏ qua */ }
+  finally { if (seq === loadSeq) careerLoading.value = false }
   // POTM mùa này: backend quét ~50 trận -> cold-cache có thể >15s. Cho timeout 60s để
   // không bị huỷ giữa chừng (lần sau đã cache nên rất nhanh).
   try {
     const m = await api.get(`/players/${id}/motm`, { timeout: 60000 })
     if (seq === loadSeq) motm.value = m.data
   } catch (e) { /* bỏ qua */ }
+  finally { if (seq === loadSeq) motmLoading.value = false }
 }
 
 // keep-alive: component bị cache, KHÔNG remount khi đổi cầu thủ. Chỉ tải lại khi đây đúng
@@ -91,6 +99,8 @@ function syncPlayer() {
 }
 onMounted(syncPlayer)
 watch(() => route.params.id, syncPlayer)
+// keep-alive: quay lại trang đã cache -> đặt lại tiêu đề tab theo cầu thủ đang xem.
+onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || null) })
 </script>
 
 <template>
@@ -102,7 +112,7 @@ watch(() => route.params.id, syncPlayer)
   <div v-else>
     <!-- ẢNH MẶT CẦU THỦ -->
     <div class="player-hero">
-      <img :src="player.photo" class="photo" @error="imgFallback" />
+      <img loading="lazy" :src="player.photo" class="photo" @error="imgFallback" />
       <div>
         <h1>{{ player.name }}</h1>
         <div class="meta">
@@ -125,6 +135,14 @@ watch(() => route.params.id, syncPlayer)
         <div class="career-sub" v-else>{{ $t('careerSub') }} · {{ career.seasons }} {{ $t('seasonsWord') }}</div>
       </div>
     </div>
+    <!-- Placeholder lúc đang tải (backend quét nhiều mùa, có thể vài chục giây lần đầu) -->
+    <div v-else-if="careerLoading" class="career-card is-loading">
+      <div class="career-num">…</div>
+      <div class="career-text">
+        <div class="career-title">{{ $t('careerGoals') }}</div>
+        <div class="career-sub">{{ $t('potmCalc') }}</div>
+      </div>
+    </div>
 
     <!-- CẦU THỦ HAY NHẤT TRẬN (POTM) — tự tính, mùa đang xem -->
     <div v-if="motm && motm.scanned > 0" class="career-card potm-card">
@@ -132,6 +150,13 @@ watch(() => route.params.id, syncPlayer)
       <div class="career-text">
         <div class="career-title">{{ $t('potmTitle') }}</div>
         <div class="career-sub">{{ $t('potmSub') }}</div>
+      </div>
+    </div>
+    <div v-else-if="motmLoading" class="career-card potm-card is-loading">
+      <div class="career-num">…</div>
+      <div class="career-text">
+        <div class="career-title">{{ $t('potmTitle') }}</div>
+        <div class="career-sub">{{ $t('potmCalc') }}</div>
       </div>
     </div>
 
@@ -157,7 +182,7 @@ watch(() => route.params.id, syncPlayer)
           <tbody>
             <tr v-for="r in clubRows" :key="r.key">
               <td class="left comp-name">
-                <img v-if="r.logo" :src="r.logo" class="comp-logo" @error="hideImg" />
+                <img v-if="r.logo" loading="lazy" :src="r.logo" class="comp-logo" @error="hideImg" />
                 <span>{{ r.league }}</span>
               </td>
               <td>{{ r.apps }}</td>
@@ -211,7 +236,7 @@ watch(() => route.params.id, syncPlayer)
           <tbody>
             <tr v-for="r in nationalRows" :key="r.key">
               <td class="left comp-name">
-                <img v-if="r.logo" :src="r.logo" class="comp-logo" @error="hideImg" />
+                <img v-if="r.logo" loading="lazy" :src="r.logo" class="comp-logo" @error="hideImg" />
                 <span>{{ r.league }}</span>
               </td>
               <td>{{ r.apps }}</td>
@@ -332,4 +357,7 @@ watch(() => route.params.id, syncPlayer)
 .career-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .potm-card { margin-top: 8px; }
 .potm-card .career-num { color: var(--accent-2); }
+.is-loading { opacity: .65; }
+.is-loading .career-num { color: var(--text-dim); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: .4 } 50% { opacity: 1 } }
 </style>
