@@ -10,6 +10,9 @@ import { leagueName as translateLeague } from '../utils/leagueNames'
 import MatchCard from '../components/MatchCard.vue'
 import FavButton from '../components/FavButton.vue'
 import KnockoutBracket from '../components/KnockoutBracket.vue'
+import { useFavoritesStore } from '../stores/favorites'
+
+const favs = useFavoritesStore()
 
 // Các giải CÓ vòng loại trực tiếp -> hiện tab "Nhánh đấu". Dùng danh sách curated để KHÔNG
 // gọi API nặng (lấy cả mùa) cho VĐQG thường vốn không có nhánh đấu.
@@ -311,11 +314,11 @@ function goPlayer(id) {
               <tr><th>#</th><th class="team-cell">{{ $t('th_team') }}</th><th>{{ $t('th_played') }}</th><th>{{ $t('th_w') }}</th><th>{{ $t('th_d') }}</th><th>{{ $t('th_l') }}</th><th>{{ $t('th_gf') }}</th><th>{{ $t('th_ga') }}</th><th>{{ $t('th_gd') }}</th><th>{{ $t('th_pts') }}</th><th class="form-th">{{ $t('th_form') }}</th></tr>
             </thead>
             <tbody>
-              <tr v-for="row in g" :key="row.team.id" :class="zone(row, g)">
+              <tr v-for="row in g" :key="row.team.id" :class="[zone(row, g), { 'fav-team': favs.isTeamFav(row.team.id) }]">
                 <td>{{ row.rank }}</td>
                 <td class="team-cell">
                   <router-link :to="{ name: 'team', params: { id: row.team.id } }" class="team-cell">
-                    <img loading="lazy" :src="row.team.logo" @error="imgFallback" />{{ teamName(row.team.name) }}
+                    <img loading="lazy" :src="row.team.logo" @error="imgFallback" />{{ teamName(row.team.name) }}<span v-if="favs.isTeamFav(row.team.id)" class="fav-star" title="Đang theo dõi">★</span>
                   </router-link>
                 </td>
                 <td>{{ row.all.played }}</td>
@@ -376,4 +379,7 @@ function goPlayer(id) {
 .std-form { display: inline-flex; gap: 3px; }
 .std-form .form-b { width: 17px; height: 17px; font-size: 9px; border-radius: 4px; }
 .form-th, .form-td { text-align: center; white-space: nowrap; }
+/* Tô sáng dòng đội đang theo dõi (nền vàng nhạt + sao, hợp với nút "Theo dõi") */
+.standings tbody tr.fav-team td { background: rgba(245, 197, 66, 0.18); }
+.fav-star { color: #f5c542; margin-left: 5px; font-size: 12px; }
 </style>

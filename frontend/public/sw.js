@@ -1,7 +1,7 @@
 // Service worker tối giản: cache app shell để mở offline được.
 // Chỉ đăng ký ở bản production (xem main.js) nên không ảnh hưởng dev.
-const CACHE = 'fmh-v2'
-const SHELL = ['/', '/index.html', '/icon.svg', '/manifest.webmanifest']
+const CACHE = 'fmh-v3'
+const SHELL = ['/', '/index.html', '/icon.svg', '/manifest.webmanifest', '/pwa-192.png', '/pwa-512.png', '/apple-touch-icon.png']
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)))
