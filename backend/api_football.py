@@ -142,6 +142,82 @@ async def get_team(team_id: int) -> list:
     return [item]
 
 
+async def _team_primary_league(team_id: int, season: int):
+    """Dò giải ĐẤU CHÍNH (VĐQG) của đội ở mùa cho trước -> (league_id, name, logo).
+    Ưu tiên type='League'; không có thì lấy giải đầu tiên. (None, None, None) nếu trống."""
+    data = await _request("/leagues", {"team": team_id, "season": season}, ttl=STATIC_TTL)
+    leagues = data.get("response", [])
+    pick = None
+    for lg in leagues:
+        if ((lg.get("league") or {}).get("type") or "").lower() == "league":
+            pick = lg["league"]
+            break
+    if not pick and leagues:
+        pick = leagues[0].get("league")
+    if not pick:
+        return (None, None, None)
+    return (pick.get("id"), pick.get("name"), pick.get("logo"))
+
+
+async def get_team_statistics(team_id: int) -> dict:
+    """Thống kê mùa của đội ở giải VĐQG: phong độ, thắng/hòa/thua, bàn TB, sạch lưới, chuỗi...
+    Tự dò giải + mùa (thử mùa trước nếu đầu mùa chưa có). {} nếu không có dữ liệu."""
+    if settings.use_mock:
+        return {}
+    season = config.default_season()
+    lid, lname, llogo = await _team_primary_league(team_id, season)
+    if not lid:
+        season -= 1
+        lid, lname, llogo = await _team_primary_league(team_id, season)
+    if not lid:
+        return {}
+    data = await _request(
+        "/teams/statistics", {"team": team_id, "league": lid, "season": season}, ttl=STATIC_TTL
+    )
+    resp = data.get("response") or {}
+    if not resp or not resp.get("fixtures"):
+        return {}
+    resp["_league"] = {"id": lid, "name": lname, "logo": llogo, "season": season}
+    return resp
+
+
+async def get_team_injuries(team_id: int) -> list:
+    """Danh sách cầu thủ chấn thương/treo giò của đội (mùa hiện tại), gộp theo cầu thủ
+    (giữ bản ghi mới nhất). [] nếu không có."""
+    if settings.use_mock:
+        return []
+    season = config.default_season()
+    data = await _request("/injuries", {"team": team_id, "season": season}, ttl=LIVE_TTL)
+    resp = data.get("response", [])
+    latest = {}
+    for x in resp:
+        p = x.get("player") or {}
+        pid = p.get("id")
+        if pid is None:
+            continue
+        d = (x.get("fixture") or {}).get("date") or ""
+        if pid not in latest or d > latest[pid]["_d"]:
+            latest[pid] = {
+                "id": pid, "name": p.get("name"), "photo": p.get("photo"),
+                "type": p.get("type"), "reason": p.get("reason"), "_d": d,
+            }
+    out = list(latest.values())
+    for o in out:
+        o.pop("_d", None)
+    return out
+
+
+async def get_team_insights(team_id: int) -> dict:
+    """Gộp thống kê mùa + danh sách chấn thương của đội trong 1 lần gọi (song song)."""
+    if settings.use_mock:
+        return {"statistics": {}, "injuries": []}
+    statistics, injuries = await asyncio.gather(
+        get_team_statistics(team_id),
+        get_team_injuries(team_id),
+    )
+    return {"statistics": statistics, "injuries": injuries}
+
+
 # ========================= GHI ĐÈ THỐNG KÊ THỦ CÔNG =========================
 # API-Football đôi khi trả SAI hoặc THIẾU một dòng giải (vd King's Cup Saudi trả số
 # CỘNG DỒN nhiều mùa: Ronaldo 16 trận/14 bàn, lại còn league.id = null nên mất logo).
@@ -314,6 +390,80 @@ async def get_player_career(player_id: int) -> dict:
 
     total = await _sum_official_goals(player_id, seasons)
     return {"goals": total, "seasons": len(seasons), "source": "api"}
+
+
+async def get_player_trophies(player_id: int) -> list:
+    """Danh hiệu cả sự nghiệp. API-Football /trophies. [] nếu không có."""
+    if settings.use_mock:
+        return []
+    data = await _request("/trophies", {"player": player_id}, ttl=STATIC_TTL)
+    return data.get("response", [])
+
+
+async def get_player_transfers(player_id: int) -> list:
+    """Lịch sử chuyển nhượng (danh sách {date, type, teams:{in,out}}). [] nếu không có."""
+    if settings.use_mock:
+        return []
+    data = await _request("/transfers", {"player": player_id}, ttl=STATIC_TTL)
+    resp = data.get("response", [])
+    return resp[0].get("transfers", []) if resp else []
+
+
+async def get_player_sidelined(player_id: int) -> list:
+    """Lịch sử chấn thương / treo giò (danh sách {type, start, end}). [] nếu không có."""
+    if settings.use_mock:
+        return []
+    data = await _request("/sidelined", {"player": player_id}, ttl=STATIC_TTL)
+    return data.get("response", [])
+
+
+async def get_player_season_stats(player_id: int, limit: int = 10) -> list:
+    """Bảng thống kê theo TỪNG MÙA (gộp mọi giải trong mùa): số trận / bàn / kiến tạo + đội chính.
+    Lấy tối đa `limit` mùa gần nhất, gọi SONG SONG cho nhanh; mỗi mùa cache 6h."""
+    if settings.use_mock:
+        return []
+    seasons_resp = await _request("/players/seasons", {"player": player_id}, ttl=STATIC_TTL)
+    seasons = sorted([s for s in (seasons_resp.get("response") or []) if isinstance(s, int)], reverse=True)[:limit]
+
+    async def one(season):
+        try:
+            data = await _request("/players", {"id": player_id, "season": season}, ttl=STATIC_TTL)
+            resp = data.get("response", [])
+        except Exception:
+            return None
+        stats = resp[0].get("statistics", []) if resp else []
+        if not stats:
+            return None
+        apps = goals = assists = 0
+        team_apps = {}  # tên đội -> số trận, để chọn đội chơi nhiều nhất làm nhãn
+        for st in stats:
+            g = st.get("games") or {}
+            a = g.get("appearences") or 0
+            apps += a
+            goals += (st.get("goals") or {}).get("total") or 0
+            assists += (st.get("goals") or {}).get("assists") or 0
+            tname = (st.get("team") or {}).get("name")
+            if tname:
+                team_apps[tname] = team_apps.get(tname, 0) + a
+        team = max(team_apps, key=team_apps.get) if team_apps else None
+        return {"season": season, "team": team, "apps": apps, "goals": goals, "assists": assists}
+
+    rows = await asyncio.gather(*[one(s) for s in seasons])
+    return [r for r in rows if r]
+
+
+async def get_player_history(player_id: int) -> dict:
+    """Gộp 4 phần lịch sử của cầu thủ trong 1 lần gọi (tải song song):
+    danh hiệu + chuyển nhượng + chấn thương + thống kê theo mùa."""
+    if settings.use_mock:
+        return {"trophies": [], "transfers": [], "sidelined": [], "seasons": []}
+    trophies, transfers, sidelined, seasons = await asyncio.gather(
+        get_player_trophies(player_id),
+        get_player_transfers(player_id),
+        get_player_sidelined(player_id),
+        get_player_season_stats(player_id),
+    )
+    return {"trophies": trophies, "transfers": transfers, "sidelined": sidelined, "seasons": seasons}
 
 
 # NEO THỦ CÔNG cho 'Cầu thủ hay nhất trận'.
@@ -498,12 +648,46 @@ async def get_topscorers(league: int, season: int = 2025) -> list:
     return _drop_qualifier_leak(data.get("response", []))
 
 
+async def get_topassists(league: int, season: int = 2025) -> list:
+    """Vua kiến tạo của 1 giải. Cùng dạng dữ liệu như topscorers (statistics[].goals.assists)."""
+    if settings.use_mock:
+        return mock_data.topscorers_for(league)
+    data = await _request("/players/topassists", {"league": league, "season": season}, ttl=STATIC_TTL)
+    return _drop_qualifier_leak(data.get("response", []))
+
+
+async def get_topyellowcards(league: int, season: int = 2025) -> list:
+    """Cầu thủ nhiều thẻ vàng nhất (statistics[].cards.yellow)."""
+    if settings.use_mock:
+        return mock_data.topscorers_for(league)
+    data = await _request("/players/topyellowcards", {"league": league, "season": season}, ttl=STATIC_TTL)
+    return _drop_qualifier_leak(data.get("response", []))
+
+
+async def get_topredcards(league: int, season: int = 2025) -> list:
+    """Cầu thủ nhiều thẻ đỏ nhất (statistics[].cards.red)."""
+    if settings.use_mock:
+        return mock_data.topscorers_for(league)
+    data = await _request("/players/topredcards", {"league": league, "season": season}, ttl=STATIC_TTL)
+    return _drop_qualifier_leak(data.get("response", []))
+
+
 async def get_statistics(fixture_id: int) -> list:
     if settings.use_mock:
         return mock_data.statistics_for(fixture_id)
     # Thống kê (sút, kiểm soát bóng) cập nhật khi live -> cache ngắn.
     data = await _request("/fixtures/statistics", {"fixture": fixture_id}, ttl=LIVE_TTL)
     return data.get("response", [])
+
+
+async def get_predictions(fixture_id: int) -> dict:
+    """Dự đoán trận: xác suất thắng/hòa/thua, lời khuyên, so sánh phong độ 2 đội.
+    API-Football /predictions. Trả {} nếu không có dữ liệu (trận quá cũ / chưa hỗ trợ)."""
+    if settings.use_mock:
+        return {}
+    data = await _request("/predictions", {"fixture": fixture_id}, ttl=STATIC_TTL)
+    resp = data.get("response", [])
+    return resp[0] if resp else {}
 
 
 async def get_fixture_players(fixture_id: int) -> list:

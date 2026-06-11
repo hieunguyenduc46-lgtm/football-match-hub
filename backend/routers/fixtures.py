@@ -112,3 +112,9 @@ async def fixture_players(fixture_id: int):
 async def fixture_h2h(fixture_id: int, home: int = 0, away: int = 0):
     """Lịch sử đối đầu 2 đội của trận này."""
     return {"response": await api_football.get_h2h(fixture_id, home, away)}
+
+
+@router.get("/fixtures/{fixture_id}/predictions")
+async def fixture_predictions(fixture_id: int):
+    """Dự đoán trận: xác suất thắng/hòa/thua + lời khuyên + so sánh phong độ. {} nếu không có."""
+    return {"response": await api_football.get_predictions(fixture_id)}

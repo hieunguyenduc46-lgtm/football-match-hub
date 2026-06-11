@@ -5,6 +5,7 @@ import api from '../services/api'
 import { imgFallback, matchDay, matchTime } from '../utils/format'
 import { setTitle } from '../utils/title'
 import FavButton from '../components/FavButton.vue'
+import TeamInsights from '../components/TeamInsights.vue'
 import { teamName } from '../utils/countryNames'
 
 const route = useRoute()
@@ -15,6 +16,8 @@ const team = ref(null)
 const recent = ref([])
 const upcoming = ref([])
 const loading = ref(true)
+const insights = ref(null)          // thống kê mùa + chấn thương (tải lười)
+const insightsLoading = ref(false)
 
 // Kết quả 1 trận xét theo đội đang xem: W / D / L.
 function resultFor(m) {
@@ -33,6 +36,8 @@ async function loadTeam(id) {
   team.value = null
   recent.value = []
   upcoming.value = []
+  insights.value = null
+  insightsLoading.value = true
   const [tRes, fRes, uRes] = await Promise.allSettled([
     api.get(`/teams/${id}`),
     api.get(`/teams/${id}/fixtures`),
@@ -44,6 +49,12 @@ async function loadTeam(id) {
   if (fRes.status === 'fulfilled') recent.value = fRes.value.data.response || []
   if (uRes.status === 'fulfilled') upcoming.value = uRes.value.data.response || []
   loading.value = false
+  // Thống kê mùa + chấn thương: tải sau, không chặn trang (backend dò giải + gọi thêm).
+  try {
+    const ins = await api.get(`/teams/${id}/insights`, { timeout: 60000 })
+    if (seq === loadSeq) insights.value = ins.data
+  } catch (e) { /* bỏ qua */ }
+  finally { if (seq === loadSeq) insightsLoading.value = false }
 }
 
 // keep-alive: component bị cache, KHÔNG remount. Chỉ tải lại khi đây đúng là trang đang
@@ -93,6 +104,13 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
       <span class="muted" style="font-size:13px">{{ $t('form') }}</span>
       <span v-for="(r, i) in form" :key="i" class="form-b" :class="'f-' + r">{{ r }}</span>
     </div>
+
+    <!-- Thống kê mùa + chấn thương (tải lười) -->
+    <TeamInsights
+      :statistics="insights?.statistics || {}"
+      :injuries="insights?.injuries || []"
+      :loading="insightsLoading"
+    />
 
     <!-- Trận sắp đá -->
     <template v-if="upcoming.length">

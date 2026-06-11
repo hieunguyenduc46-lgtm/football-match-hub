@@ -11,6 +11,7 @@ import MatchTimeline from '../components/MatchTimeline.vue'
 import MatchStats from '../components/MatchStats.vue'
 import PlayerRatings from '../components/PlayerRatings.vue'
 import H2HList from '../components/H2HList.vue'
+import MatchPrediction from '../components/MatchPrediction.vue'
 import FavButton from '../components/FavButton.vue'
 import { teamName } from '../utils/countryNames'
 
@@ -22,6 +23,7 @@ const events = ref([])
 const stats = ref([])
 const ratings = ref([])
 const h2h = ref([])
+const prediction = ref(null)
 const standings = ref([])
 const loading = ref(true)
 const error = ref(null)
@@ -161,6 +163,7 @@ async function loadMatch() {
   stats.value = []
   ratings.value = []
   h2h.value = []
+  prediction.value = null
   standings.value = []
   legInfo.value = null
   tab.value = 'lineup'
@@ -251,6 +254,9 @@ async function selectTab(name) {
       const params = { home: fixture.value?.teams.home.id, away: fixture.value?.teams.away.id }
       const { data } = await api.get(`/fixtures/${id}/h2h`, { params })
       h2h.value = data.response || []
+    } else if (name === 'prediction') {
+      const { data } = await api.get(`/fixtures/${id}/predictions`)
+      prediction.value = data.response || null
     }
   } catch (e) {
     fetched[name] = false // cho phép thử lại
@@ -345,6 +351,7 @@ onUnmounted(() => clearInterval(timer))
       <button class="tab" :class="{ active: tab === 'stats' }" @click="selectTab('stats')">{{ $t('tab_stats') }}</button>
       <button class="tab" :class="{ active: tab === 'ratings' }" @click="selectTab('ratings')">{{ $t('tab_ratings') }}</button>
       <button class="tab" :class="{ active: tab === 'h2h' }" @click="selectTab('h2h')">{{ $t('tab_h2h') }}</button>
+      <button class="tab" :class="{ active: tab === 'prediction' }" @click="selectTab('prediction')">{{ $t('tab_prediction') }}</button>
     </div>
 
     <LineupPitch v-if="tab === 'lineup'" :lineups="lineups" />
@@ -352,6 +359,7 @@ onUnmounted(() => clearInterval(timer))
     <MatchStats v-else-if="tab === 'stats'" :stats="stats" />
     <PlayerRatings v-else-if="tab === 'ratings'" :data="ratings" />
     <H2HList v-else-if="tab === 'h2h'" :matches="h2h" :home-team-id="fixture.teams.home.id" />
+    <MatchPrediction v-else-if="tab === 'prediction'" :data="prediction || {}" :home="fixture.teams.home" :away="fixture.teams.away" />
   </div>
 </template>
 

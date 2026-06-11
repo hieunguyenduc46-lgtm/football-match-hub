@@ -7,6 +7,7 @@ import { splitStats, totalsOf } from '../utils/playerStats'
 import { setTitle } from '../utils/title'
 import { t } from '../i18n'
 import FavButton from '../components/FavButton.vue'
+import PlayerHistory from '../components/PlayerHistory.vue'
 
 const route = useRoute()
 const data = ref(null)
@@ -15,6 +16,8 @@ const career = ref(null)        // tổng bàn sự nghiệp (tải riêng, có 
 const motm = ref(null)          // số lần hay nhất trận mùa này (tải riêng, quét fixtures)
 const careerLoading = ref(false) // đang tải thẻ tổng bàn -> hiện placeholder "Đang tính…"
 const motmLoading = ref(false)   // đang tải thẻ POTM -> hiện placeholder "Đang tính…"
+const history = ref(null)        // danh hiệu + chuyển nhượng + chấn thương + thống kê theo mùa
+const historyLoading = ref(false)
 
 const player = computed(() => data.value?.player || null)
 
@@ -71,8 +74,10 @@ async function loadPlayer(id) {
   data.value = null
   career.value = null
   motm.value = null
+  history.value = null
   careerLoading.value = true
   motmLoading.value = true
+  historyLoading.value = true
   try {
     const res = await api.get(`/players/${id}`)
     if (seq !== loadSeq) return                  // đã chuyển sang cầu thủ khác
@@ -95,6 +100,12 @@ async function loadPlayer(id) {
     if (seq === loadSeq) motm.value = m.data
   } catch (e) { /* bỏ qua */ }
   finally { if (seq === loadSeq) motmLoading.value = false }
+  // Lịch sử (danh hiệu/chuyển nhượng/chấn thương/mùa): tải sau cùng, quét nhiều mùa -> timeout dài.
+  try {
+    const h = await api.get(`/players/${id}/history`, { timeout: 60000 })
+    if (seq === loadSeq) history.value = h.data
+  } catch (e) { /* bỏ qua */ }
+  finally { if (seq === loadSeq) historyLoading.value = false }
 }
 
 // keep-alive: component bị cache, KHÔNG remount khi đổi cầu thủ. Chỉ tải lại khi đây đúng
@@ -279,6 +290,9 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
         </table>
       </div>
     </div>
+
+    <!-- LỊCH SỬ: danh hiệu + thống kê theo mùa + chuyển nhượng + chấn thương -->
+    <PlayerHistory :history="history || {}" :loading="historyLoading" />
   </div>
 </template>
 

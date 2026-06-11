@@ -80,6 +80,46 @@ async function loadBracket(id, yr) {
 }
 watch(tab, (v) => { if (v === 'bracket') loadBracket(route.params.id, season.value) })
 
+// ===== Bảng xếp hạng cá nhân khác: Kiến tạo / Thẻ vàng / Thẻ đỏ =====
+// Tải LƯỜI giống tab Lịch đấu/Nhánh đấu: chỉ gọi API khi người dùng mở tab đó.
+const BOARD_EP = { assists: '/topassists', ycards: '/topyellowcards', rcards: '/topredcards' }
+const boards = ref({ assists: [], ycards: [], rcards: [] })
+const boardLoading = ref(false)
+const boardKey = { assists: null, ycards: null, rcards: null }
+async function loadBoard(kind) {
+  const id = route.params.id
+  const key = `${id}:${season.value || ''}`
+  if (!id || boardKey[kind] === key) return
+  boardKey[kind] = key
+  boardLoading.value = true
+  boards.value[kind] = []
+  try {
+    const { data } = await api.get(BOARD_EP[kind], { params: seasonParams(id) })
+    if (boardKey[kind] === key) boards.value[kind] = data.response || []
+  } finally {
+    if (boardKey[kind] === key) boardLoading.value = false
+  }
+}
+function resetBoards() { boardKey.assists = boardKey.ycards = boardKey.rcards = null; boards.value = { assists: [], ycards: [], rcards: [] } }
+watch(tab, (v) => { if (v in BOARD_EP) loadBoard(v) })
+
+// Danh sách + chỉ số đang hiển thị theo tab (gộp chung khối render với vua phá lưới).
+const activeBoard = computed(() => (tab.value in BOARD_EP ? boards.value[tab.value] : scorers.value))
+function mainStat(s) {
+  const st = s.statistics?.[0] || {}
+  if (tab.value === 'assists') return st.goals?.assists ?? 0
+  if (tab.value === 'ycards') return st.cards?.yellow ?? 0
+  if (tab.value === 'rcards') return st.cards?.red ?? 0
+  return st.goals?.total ?? 0
+}
+function subStat(s) {
+  const st = s.statistics?.[0] || {}
+  if (tab.value === 'assists') return `${st.goals?.total ?? 0} ${t('goalsShort')}`
+  if (tab.value === 'ycards') return `${st.cards?.red ?? 0} ${t('redShort')}`
+  if (tab.value === 'rcards') return `${st.cards?.yellow ?? 0} ${t('yellowShort')}`
+  return `${st.goals?.assists ?? 0} ${t('assistsShort')}`
+}
+
 // standings = mảng các "bảng" (giải thường: 1 bảng; World Cup: 8 bảng A–H).
 const groups = computed(() => raw.value?.league?.standings || [])
 const leagueName = computed(() => translateLeague(raw.value?.league?.name, raw.value?.league?.id ?? route.params.id) || t('league_default'))
@@ -155,12 +195,14 @@ async function loadLeague(id) {
   fixtures.value = { recent: [], upcoming: [] }
   brLoadedId = null
   bracket.value = []
+  resetBoards()
   // Mùa khởi tạo: lấy từ URL (?season=...) khi đi từ 1 trận sang; nếu không -> để backend mặc định.
   season.value = Number(route.query.season) || null
   seasons.value = []
   api.get(`/leagues/${id}/seasons`).then(({ data }) => { if (seq === loadSeq) seasons.value = data.response || [] }).catch(() => {})
   if (tab.value === 'fixtures') loadFixtures(id, season.value)
   if (tab.value === 'bracket') loadBracket(id, season.value)
+  if (tab.value in BOARD_EP) loadBoard(tab.value)
   await loadStandingsScorers(id, seq)
 }
 
@@ -179,6 +221,8 @@ function changeSeason(yr) {
   brLoadedId = null
   bracket.value = []
   if (tab.value === 'bracket') loadBracket(id, season.value)
+  resetBoards()
+  if (tab.value in BOARD_EP) loadBoard(tab.value)
 }
 
 // keep-alive: component bị cache, KHÔNG remount. Chỉ tải lại khi đây đúng là trang đang
@@ -216,6 +260,9 @@ function goPlayer(id) {
     <button class="tab" :class="{ active: tab === 'fixtures' }" @click="tab = 'fixtures'">{{ $t('tab_fixtures') }}</button>
     <button v-if="showBracketTab" class="tab" :class="{ active: tab === 'bracket' }" @click="tab = 'bracket'">{{ $t('tab_bracket') }}</button>
     <button class="tab" :class="{ active: tab === 'scorers' }" @click="tab = 'scorers'">{{ $t('tab_scorers') }}</button>
+    <button class="tab" :class="{ active: tab === 'assists' }" @click="tab = 'assists'">{{ $t('tab_assists') }}</button>
+    <button class="tab" :class="{ active: tab === 'ycards' }" @click="tab = 'ycards'">{{ $t('tab_ycards') }}</button>
+    <button class="tab" :class="{ active: tab === 'rcards' }" @click="tab = 'rcards'">{{ $t('tab_rcards') }}</button>
   </div>
 
   <!-- Chọn mùa / kỳ -->
@@ -261,7 +308,7 @@ function goPlayer(id) {
         <div class="table-wrap">
           <table class="standings">
             <thead>
-              <tr><th>#</th><th class="team-cell">{{ $t('th_team') }}</th><th>{{ $t('th_played') }}</th><th>{{ $t('th_w') }}</th><th>{{ $t('th_d') }}</th><th>{{ $t('th_l') }}</th><th>{{ $t('th_gf') }}</th><th>{{ $t('th_ga') }}</th><th>{{ $t('th_gd') }}</th><th>{{ $t('th_pts') }}</th></tr>
+              <tr><th>#</th><th class="team-cell">{{ $t('th_team') }}</th><th>{{ $t('th_played') }}</th><th>{{ $t('th_w') }}</th><th>{{ $t('th_d') }}</th><th>{{ $t('th_l') }}</th><th>{{ $t('th_gf') }}</th><th>{{ $t('th_ga') }}</th><th>{{ $t('th_gd') }}</th><th>{{ $t('th_pts') }}</th><th class="form-th">{{ $t('th_form') }}</th></tr>
             </thead>
             <tbody>
               <tr v-for="row in g" :key="row.team.id" :class="zone(row, g)">
@@ -279,6 +326,12 @@ function goPlayer(id) {
                 <td>{{ row.all.goals?.against ?? '-' }}</td>
                 <td>{{ row.goalsDiff > 0 ? '+' : '' }}{{ row.goalsDiff }}</td>
                 <td><strong>{{ row.points }}</strong></td>
+                <td class="form-td">
+                  <span v-if="row.form" class="std-form">
+                    <span v-for="(r, i) in String(row.form).slice(-5).split('')" :key="i" class="form-b" :class="'f-' + r">{{ r }}</span>
+                  </span>
+                  <span v-else class="muted">–</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -290,12 +343,13 @@ function goPlayer(id) {
     </template>
   </div>
 
-  <!-- Vua phá lưới -->
+  <!-- Bảng xếp hạng cá nhân: Vua phá lưới / Kiến tạo / Thẻ vàng / Thẻ đỏ -->
   <div v-else>
-    <div v-if="scorers.length === 0" class="center">{{ $t('noScorers') }}</div>
+    <div v-if="boardLoading" class="skeleton" style="height:200px"></div>
+    <div v-else-if="activeBoard.length === 0" class="center">{{ tab === 'scorers' ? $t('noScorers') : $t('noLeaderboard') }}</div>
     <div v-else>
       <div
-        v-for="(s, i) in scorers"
+        v-for="(s, i) in activeBoard"
         :key="s.player.id"
         class="match-card"
         style="grid-template-columns:28px 40px 1fr auto"
@@ -308,10 +362,17 @@ function goPlayer(id) {
           <div class="muted" style="font-size:12px">{{ teamName(s.statistics?.[0]?.team?.name || '') }}</div>
         </span>
         <span style="text-align:right">
-          <strong style="font-size:18px">{{ s.statistics?.[0]?.goals?.total ?? 0 }}</strong>
-          <div class="muted" style="font-size:12px">{{ s.statistics?.[0]?.goals?.assists ?? 0 }} {{ $t('assistsShort') }}</div>
+          <strong style="font-size:18px">{{ mainStat(s) }}</strong>
+          <div class="muted" style="font-size:12px">{{ subStat(s) }}</div>
         </span>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Cột Form ở bảng xếp hạng: dùng lại chip .form-b toàn cục nhưng thu nhỏ cho gọn bảng */
+.std-form { display: inline-flex; gap: 3px; }
+.std-form .form-b { width: 17px; height: 17px; font-size: 9px; border-radius: 4px; }
+.form-th, .form-td { text-align: center; white-space: nowrap; }
+</style>

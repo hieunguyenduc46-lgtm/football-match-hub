@@ -21,3 +21,10 @@ async def team_fixtures(team_id: int):
 async def team_upcoming(team_id: int):
     """Các trận sắp đá của đội."""
     return {"response": await api_football.get_team_upcoming(team_id)}
+
+
+@router.get("/teams/{team_id}/insights")
+async def team_insights(team_id: int):
+    """Thống kê mùa (phong độ, thắng/hòa/thua, bàn TB, sạch lưới, chuỗi) + DS chấn thương.
+    Tải LƯỜI ở trang đội. Trả {statistics, injuries}."""
+    return await api_football.get_team_insights(team_id)

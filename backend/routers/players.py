@@ -16,6 +16,24 @@ async def topscorers(league: int = 39, season: Optional[int] = None):
     return {"response": await api_football.get_topscorers(league, season or config.season_for(league))}
 
 
+@router.get("/topassists")
+async def topassists(league: int = 39, season: Optional[int] = None):
+    """Vua kiến tạo của 1 giải. Cùng tham số như /topscorers."""
+    return {"response": await api_football.get_topassists(league, season or config.season_for(league))}
+
+
+@router.get("/topyellowcards")
+async def topyellowcards(league: int = 39, season: Optional[int] = None):
+    """Cầu thủ nhiều thẻ vàng nhất của 1 giải."""
+    return {"response": await api_football.get_topyellowcards(league, season or config.season_for(league))}
+
+
+@router.get("/topredcards")
+async def topredcards(league: int = 39, season: Optional[int] = None):
+    """Cầu thủ nhiều thẻ đỏ nhất của 1 giải."""
+    return {"response": await api_football.get_topredcards(league, season or config.season_for(league))}
+
+
 @router.get("/players/{player_id}")
 async def player_detail(player_id: int, season: Optional[int] = None):
     """Chi tiết cầu thủ: ảnh mặt + thống kê (bàn thắng, kiến tạo, số trận...)."""
@@ -39,6 +57,14 @@ async def player_motm(request: Request, player_id: int, season: Optional[int] = 
     vì tốn nhiều request; kết quả được cache 6h ở tầng api_football.
     Rate limit: endpoint NẶNG nhất (~50 request/lần) -> chặn 1 IP gọi nhiều id khác nhau."""
     return await api_football.get_player_motm(player_id, season or config.default_season())
+
+
+@router.get("/players/{player_id}/history")
+@limiter.shared_limit("30/minute", scope="player_heavy")
+async def player_history(request: Request, player_id: int):
+    """Lịch sử cầu thủ: danh hiệu + chuyển nhượng + chấn thương + thống kê theo mùa.
+    Tải LƯỜI (frontend chỉ gọi khi mở hồ sơ). Quét nhiều mùa -> rate-limit nhóm nặng."""
+    return await api_football.get_player_history(player_id)
 
 
 @router.get("/_debug/player/{player_id}")
