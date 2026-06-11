@@ -27,7 +27,8 @@ function resultFor(m) {
   const isHome = m.teams.home.id === teamId.value
   return (homeWon && isHome) || (!homeWon && !isHome) ? 'W' : 'L'
 }
-const form = computed(() => recent.value.map(resultFor))
+// recent = mới->cũ; đảo lại để phong độ hiện CŨ->MỚI (trận mới nhất bên phải).
+const form = computed(() => recent.value.map(resultFor).reverse())
 
 let loadSeq = 0
 async function loadTeam(id) {

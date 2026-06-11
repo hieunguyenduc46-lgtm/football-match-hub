@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { t } from '../i18n'
 import { teamName } from '../utils/countryNames'
+import { injuryName } from '../utils/injuryNames'
 import { imgFallback } from '../utils/format'
 
 // history = { trophies, transfers, sidelined, seasons }
@@ -119,7 +120,7 @@ const hasAny = computed(
       <div class="tl">
         <div v-for="(s, i) in sidelinedList" :key="i" class="tl-row">
           <span class="tl-year">{{ yearOf(s.start) }}</span>
-          <span class="tl-move">{{ s.type }}</span>
+          <span class="tl-move">{{ injuryName(s.type) }}</span>
           <span class="tl-fee muted">{{ s.start }} → {{ s.end || '…' }}</span>
         </div>
       </div>

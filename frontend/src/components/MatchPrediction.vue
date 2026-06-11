@@ -18,9 +18,34 @@ function pct(v) {
   return Number.isNaN(n) ? 0 : n
 }
 
+// Xác suất Thắng/Hòa/Thua.
+// API trả `percent` khá THÔ cho trận ít dữ liệu (hay gom về 10/45/45...). Ta tính lại từ
+// `comparison` (phong độ/tấn công/phòng thủ/poisson/đối đầu — các số này MỊN và thật hơn)
+// để ra con số sát thực tế hơn. Không có comparison -> mới dùng percent gốc của API.
 const percent = computed(() => {
-  const p = pred.value?.percent || {}
-  return { home: pct(p.home), draw: pct(p.draw), away: pct(p.away) }
+  const c = props.data?.comparison || {}
+  const fields = ['form', 'att', 'def', 'poisson_distribution', 'h2h', 'total']
+  let hs = 0, as = 0, n = 0
+  for (const f of fields) {
+    const cell = c[f]
+    if (cell && (cell.home != null || cell.away != null)) {
+      hs += pct(cell.home); as += pct(cell.away); n++
+    }
+  }
+  if (n === 0) {
+    const p = pred.value?.percent || {}
+    return { home: pct(p.home), draw: pct(p.draw), away: pct(p.away) }
+  }
+  const total = hs + as || 1
+  const h = hs / total, a = as / total            // tỉ trọng sức mạnh 2 đội (cộng = 1)
+  const diff = Math.abs(h - a)
+  let draw = Math.round(30 * (1 - diff))           // hòa CAO khi cân tài (tối đa ~30%), thấp khi lệch
+  if (draw < 5) draw = 5
+  const rem = 100 - draw
+  let home = Math.round(rem * h)
+  let away = 100 - draw - home
+  if (away < 0) { away = 0; home = 100 - draw }
+  return { home, draw, away }
 })
 
 const advice = computed(() => pred.value?.advice || '')

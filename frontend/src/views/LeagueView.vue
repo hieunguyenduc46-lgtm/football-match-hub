@@ -328,7 +328,8 @@ function goPlayer(id) {
                 <td><strong>{{ row.points }}</strong></td>
                 <td class="form-td">
                   <span v-if="row.form" class="std-form">
-                    <span v-for="(r, i) in String(row.form).slice(-5).split('')" :key="i" class="form-b" :class="'f-' + r">{{ r }}</span>
+                    <!-- API trả form theo MỚI->CŨ; đảo lại để hiện CŨ->MỚI (mới nhất bên phải). -->
+                    <span v-for="(r, i) in String(row.form).slice(0, 5).split('').reverse()" :key="i" class="form-b" :class="'f-' + r">{{ r }}</span>
                   </span>
                   <span v-else class="muted">–</span>
                 </td>

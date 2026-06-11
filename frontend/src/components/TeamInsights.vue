@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { imgFallback } from '../utils/format'
+import { injuryName } from '../utils/injuryNames'
 
 // statistics = object /teams/statistics (đã trim, kèm _league). injuries = [{name, reason, photo}]
 const props = defineProps({
@@ -56,7 +57,7 @@ const hasAny = computed(() => hasStats.value || injuries.value.length)
           <img loading="lazy" :src="p.photo" @error="imgFallback" />
           <div class="ti-inj-txt">
             <div class="ti-inj-name">{{ p.name }}</div>
-            <div class="ti-inj-reason muted">{{ p.reason || p.type }}</div>
+            <div class="ti-inj-reason muted">{{ injuryName(p.reason || p.type) }}</div>
           </div>
         </div>
       </div>

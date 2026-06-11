@@ -98,12 +98,11 @@ CAREER_BASELINE = {
     # Cơ chế: total = goals + bàn các mùa SAU `through` (API tự cộng). Mùa hiện tại (2025) API
     # đang cộng 42 bàn, nên đặt baseline 931 để 931 + 42 = 973. Có bàn mới -> API tự cập nhật tiếp.
     874: {"goals": 931, "through": 2024},
-    # Lionel Messi (id 154) — neo cứng 907 bàn official (Barça 672 + PSG 32 + Inter Miami 81 +
-    # Argentina 115), tính đến ~05/2026 (đạt mốc 900 ngày 18/03/2026). Nguồn: Wikipedia/beIN/ESPN.
-    # API-Football tự cộng chỉ ra 830 vì dữ liệu các mùa cũ (2004–2015) bị thiếu -> neo tay cho chuẩn.
-    # `through` đặt cao (2026) để KHÔNG cộng thêm mùa nào -> hiển thị đúng 907; ghi thêm bàn thì
-    # tăng số này lên (mỗi vài tháng cập nhật 1 lần), giống cách làm với Ronaldo.
-    154: {"goals": 907, "through": 2026},
+    # Lionel Messi (id 154) — neo 911 bàn official, TỰ CẬP NHẬT mùa hiện tại.
+    # Cơ chế: baseline = official tính ĐẾN HẾT mùa 2025 = 889; app TỰ CỘNG bàn official mùa
+    # 2026 (API đang là 22) -> 889 + 22 = 911 ngay bây giờ, và tự tăng khi Messi ghi thêm.
+    # (API tự cộng toàn bộ ra sai vì thiếu dữ liệu mùa cũ 2004–2015, nên phải neo phần cũ.)
+    154: {"goals": 889, "through": 2025},
     # Neymar (id 276) — 491 bàn official (Santos/Barça/PSG/Al-Hilal + Brazil), tính ~06/2026.
     # Nguồn: Wikipedia/FotMob. (Đã trở lại Santos đầu 2026.)
     276: {"goals": 491, "through": 2026},

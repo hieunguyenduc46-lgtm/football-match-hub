@@ -393,11 +393,26 @@ async def get_player_career(player_id: int) -> dict:
 
 
 async def get_player_trophies(player_id: int) -> list:
-    """Danh hiệu cả sự nghiệp. API-Football /trophies. [] nếu không có."""
+    """Danh hiệu cả sự nghiệp. API-Football /trophies.
+    Làm sạch: BỎ bản ghi thiếu mùa (season rỗng -> entry lỗi của API, gây đếm thừa,
+    vd Ronaldo bị +1 'UEFA Champions League' ảo) và KHỬ TRÙNG LẶP theo
+    (quốc gia|giải|mùa|hạng). [] nếu không có."""
     if settings.use_mock:
         return []
     data = await _request("/trophies", {"player": player_id}, ttl=STATIC_TTL)
-    return data.get("response", [])
+    resp = data.get("response", [])
+    seen = set()
+    out = []
+    for t in resp:
+        season = (t.get("season") or "").strip()
+        if not season:
+            continue  # bản ghi thiếu mùa -> dữ liệu rác, bỏ
+        key = (t.get("country") or "", t.get("league") or "", season, t.get("place") or "")
+        if key in seen:
+            continue  # trùng -> bỏ
+        seen.add(key)
+        out.append(t)
+    return out
 
 
 async def get_player_transfers(player_id: int) -> list:
