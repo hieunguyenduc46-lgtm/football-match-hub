@@ -392,6 +392,23 @@ async def get_player_career(player_id: int) -> dict:
     return {"goals": total, "seasons": len(seasons), "source": "api"}
 
 
+# Cúp GIAO HỮU / BIỂU DIỄN tiền mùa giải + giải TRẺ -> KHÔNG tính là danh hiệu thật.
+# (vd "Trofeo Joan Gamper", "Copa Catalunya" của Messi; "UEFA U19" của Mbappé.)
+# Lưu ý: "Trophée des Champions" (Siêu cúp Pháp) KHÁC "Trofeo ..." (giao hữu Tây Ban Nha)
+# nên match "trofeo" an toàn, không đụng cúp Pháp. GIỮ Olympic vì là danh hiệu thật.
+_EXHIBITION_TROPHY_KW = (
+    "trofeo", "catalunya", "audi cup", "emirates cup", "international champions cup",
+    "florida cup", "berlusconi", "eusebio", "eusébio", "amsterdam tournament",
+    "teresa herrera", "carranza", "naranja", "colombino", "bortolotti", "friendl",
+    "u15", "u16", "u17", "u18", "u19", "u20", "u21", "u23", "youth",
+)
+
+
+def _is_exhibition_trophy(league: str) -> bool:
+    name = (league or "").lower()
+    return any(k in name for k in _EXHIBITION_TROPHY_KW)
+
+
 async def get_player_trophies(player_id: int) -> list:
     """Danh hiệu cả sự nghiệp. API-Football /trophies.
     Làm sạch: BỎ bản ghi thiếu mùa (season rỗng -> entry lỗi của API, gây đếm thừa,
@@ -407,6 +424,8 @@ async def get_player_trophies(player_id: int) -> list:
         season = (t.get("season") or "").strip()
         if not season:
             continue  # bản ghi thiếu mùa -> dữ liệu rác, bỏ
+        if _is_exhibition_trophy(t.get("league")):
+            continue  # cúp giao hữu/biểu diễn hoặc giải trẻ -> KHÔNG tính là danh hiệu
         key = (t.get("country") or "", t.get("league") or "", season, t.get("place") or "")
         if key in seen:
             continue  # trùng -> bỏ
@@ -451,16 +470,27 @@ async def get_player_season_stats(player_id: int, limit: int = 10) -> list:
             return None
         apps = goals = assists = 0
         team_apps = {}  # tên đội -> số trận, để chọn đội chơi nhiều nhất làm nhãn
+        seen = set()    # (đội|giải) đã cộng -> tránh API trả trùng mục gây cộng dư
         for st in stats:
+            # Bỏ giao hữu + đội trẻ/Olympic (giống cách tính bàn official) -> số liệu sạch, nhất quán.
+            if not _is_official_goal_entry(st):
+                continue
+            tname = (st.get("team") or {}).get("name")
+            lname = (st.get("league") or {}).get("name")
+            dkey = f"{tname}|{lname}"
+            if dkey in seen:
+                continue
+            seen.add(dkey)
             g = st.get("games") or {}
             a = g.get("appearences") or 0
             apps += a
             goals += (st.get("goals") or {}).get("total") or 0
             assists += (st.get("goals") or {}).get("assists") or 0
-            tname = (st.get("team") or {}).get("name")
             if tname:
                 team_apps[tname] = team_apps.get(tname, 0) + a
-        team = max(team_apps, key=team_apps.get) if team_apps else None
+        if not team_apps:
+            return None  # mùa chỉ có giao hữu/đội trẻ -> bỏ, không hiện dòng rỗng
+        team = max(team_apps, key=team_apps.get)
         return {"season": season, "team": team, "apps": apps, "goals": goals, "assists": assists}
 
     rows = await asyncio.gather(*[one(s) for s in seasons])
