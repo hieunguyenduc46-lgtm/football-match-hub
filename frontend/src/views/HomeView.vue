@@ -35,6 +35,24 @@ const dates = ref(buildDates())
 const selectedDate = ref(dates.value.find((d) => d.today).iso)
 // Gói PRO: xem được mọi ngày (quá khứ + tương lai) -> không giới hạn ô chọn ngày nữa.
 
+// Nhãn ngày hiển thị: TỰ định dạng theo ngôn ngữ web (VI/EN) thay vì để <input type=date>
+// hiện theo ngôn ngữ HỆ ĐIỀU HÀNH (vd iPhone tiếng Việt sẽ ra "ngày 12 thg 6" dù web đang EN).
+// toLocaleDateString có truyền locale rõ ràng -> luôn đúng ngôn ngữ web dù máy đặt gì.
+const dateInput = ref(null)
+const dateLabel = computed(() => {
+  const parts = String(selectedDate.value || '').split('-')
+  if (parts.length !== 3) return selectedDate.value
+  const [y, m, d] = parts.map(Number)
+  const dt = new Date(y, m - 1, d)
+  if (isNaN(dt.getTime())) return selectedDate.value
+  const loc = state.locale === 'vi' ? 'vi-VN' : 'en-GB'
+  return dt.toLocaleDateString(loc, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+})
+// Desktop: click vào vùng ngày cần gọi showPicker() để mở lịch (mobile thì tự mở khi chạm).
+function openDatePicker() {
+  try { dateInput.value?.showPicker?.() } catch (e) { /* trình duyệt cũ / mobile mở sẵn */ }
+}
+
 function todayIso() {
   return localISO(new Date())
 }
@@ -193,7 +211,11 @@ onUnmounted(stopPolling)
       <option value="">{{ $t('all') }}</option>
       <option v-for="l in leagues" :key="l.id" :value="l.id">{{ leagueName(l.name, l.id) }}</option>
     </select>
-    <input type="date" v-model="selectedDate" class="league-select" />
+    <!-- Ngày: nhãn tự định dạng theo VI/EN (input gốc ẩn trong suốt, chỉ để mở lịch) -->
+    <span class="league-select date-pick" @click="openDatePicker">
+      <span class="date-pick-text">{{ dateLabel }}</span>
+      <input ref="dateInput" type="date" v-model="selectedDate" class="date-pick-native" :aria-label="dateLabel" />
+    </span>
   </div>
 
   <div v-if="error" class="error-box">{{ error }} {{ $t('backendErr') }}</div>
@@ -215,3 +237,12 @@ onUnmounted(stopPolling)
     </section>
   </div>
 </template>
+
+<style scoped>
+/* Ô chọn ngày: nhãn chữ (tự định dạng VI/EN) + input gốc ẩn trong suốt đè lên để mở lịch */
+.date-pick { position: relative; display: inline-flex; align-items: center; white-space: nowrap; }
+.date-pick-native {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; border: 0; margin: 0; padding: 0; cursor: pointer;
+}
+</style>

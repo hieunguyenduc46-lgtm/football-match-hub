@@ -421,7 +421,7 @@ async def get_player_trophies(player_id: int) -> list:
     seen = set()
     out = []
     for t in resp:
-        season = (t.get("season") or "").strip()
+        season = str(t.get("season") or "").strip()  # ép str: phòng khi API trả season dạng số
         if not season:
             continue  # bản ghi thiếu mùa -> dữ liệu rác, bỏ
         if _is_exhibition_trophy(t.get("league")):
