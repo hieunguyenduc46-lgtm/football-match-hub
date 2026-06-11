@@ -52,6 +52,13 @@ const dateLabel = computed(() => {
 function openDatePicker() {
   try { dateInput.value?.showPicker?.() } catch (e) { /* trình duyệt cũ / mobile mở sẵn */ }
 }
+// Thiết bị cảm ứng (điện thoại/máy tính bảng)? -> dùng nhãn tự định dạng (vì iOS bỏ qua `lang`).
+// Máy tính (chuột/trackpad) -> dùng input ngày GỐC để GÕ SỐ chỉnh ngày được; input gốc trên
+// desktop tôn trọng `lang` nên vẫn hiện đúng định dạng theo VI/EN.
+// '(pointer: coarse)' = con trỏ CHÍNH là cảm ứng (điện thoại/máy tính bảng). Laptop có
+// màn cảm ứng nhưng trỏ chính là trackpad/chuột -> vẫn là 'fine' -> dùng input gõ số được.
+const isTouch = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)')?.matches
+const dateLang = computed(() => (state.locale === 'vi' ? 'vi' : 'en-GB'))
 
 function todayIso() {
   return localISO(new Date())
@@ -211,8 +218,10 @@ onUnmounted(stopPolling)
       <option value="">{{ $t('all') }}</option>
       <option v-for="l in leagues" :key="l.id" :value="l.id">{{ leagueName(l.name, l.id) }}</option>
     </select>
-    <!-- Ngày: nhãn tự định dạng theo VI/EN (input gốc ẩn trong suốt, chỉ để mở lịch) -->
-    <span class="league-select date-pick" @click="openDatePicker">
+    <!-- Máy tính: input ngày GỐC để gõ số chỉnh ngày được (lang -> định dạng đúng VI/EN) -->
+    <input v-if="!isTouch" type="date" v-model="selectedDate" class="league-select" :lang="dateLang" />
+    <!-- Điện thoại/cảm ứng: nhãn tự định dạng theo VI/EN, input gốc ẩn trong suốt để mở lịch -->
+    <span v-else class="league-select date-pick" @click="openDatePicker">
       <span class="date-pick-text">{{ dateLabel }}</span>
       <input ref="dateInput" type="date" v-model="selectedDate" class="date-pick-native" :aria-label="dateLabel" />
     </span>
