@@ -8,6 +8,13 @@ function isHome(e) {
   return e?.team?.id === props.homeTeamId
 }
 
+// Phút sự kiện, KÈM bù giờ nếu có (vd 45+3, 90+2). Khớp cách hiển thị ở tóm tắt bàn thắng.
+function minute(e) {
+  const tm = e.time || {}
+  if (tm.elapsed == null) return ''
+  return tm.extra ? `${tm.elapsed}+${tm.extra}` : `${tm.elapsed}`
+}
+
 // Icon theo loại sự kiện.
 function icon(e) {
   if (e.type === 'Goal') return e.detail === 'Own Goal' ? '⚽(OG)' : '⚽'
@@ -29,7 +36,7 @@ function icon(e) {
           <span class="ic">{{ icon(e) }}</span>
         </template>
       </div>
-      <div class="tl-min">{{ e.time?.elapsed ?? '' }}'</div>
+      <div class="tl-min">{{ minute(e) }}'</div>
       <div class="tl-cell right">
         <template v-if="!isHome(e)">
           <span class="ic">{{ icon(e) }}</span>
