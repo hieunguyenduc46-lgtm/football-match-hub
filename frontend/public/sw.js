@@ -1,6 +1,6 @@
 // Service worker tối giản: cache app shell để mở offline được.
 // Chỉ đăng ký ở bản production (xem main.js) nên không ảnh hưởng dev.
-const CACHE = 'fmh-v6'
+const CACHE = 'fmh-v7'
 const SHELL = ['/', '/index.html', '/icon-v2.svg', '/manifest.webmanifest', '/pwa-192-v2.png', '/pwa-512-v2.png', '/apple-touch-icon-v2.png']
 
 self.addEventListener('install', (e) => {
@@ -27,9 +27,10 @@ self.addEventListener('fetch', (e) => {
   // nếu cache-first sẽ giữ bản cũ/hỏng -> script analytics không nạp đúng.
   if (url.pathname.startsWith('/_vercel')) return
 
-  // Điều hướng trang: ưu tiên mạng, offline thì trả index.html.
+  // Điều hướng trang: LUÔN lấy index.html MỚI từ mạng (no-store) để không bao giờ phục vụ
+  // shell cũ trỏ tới file chunk đã bị xoá sau khi deploy (gây trang trắng). Offline -> fallback.
   if (request.mode === 'navigate') {
-    e.respondWith(fetch(request).catch(() => caches.match('/index.html')))
+    e.respondWith(fetch(request, { cache: 'no-store' }).catch(() => caches.match('/index.html')))
     return
   }
 

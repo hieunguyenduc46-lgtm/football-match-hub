@@ -54,4 +54,18 @@ router.afterEach((to) => {
   setTitle(to.name in titles ? titles[to.name] : null)
 })
 
+// Sau khi DEPLOY bản mới, các file chunk cũ bị xoá -> import động trang lazy có thể lỗi
+// "Failed to fetch dynamically imported module" (người dùng đang mở app / cache cũ) -> trang
+// trắng. Bắt lỗi đó và TẢI LẠI 1 LẦN để lấy bản mới. sessionStorage chống lặp vô hạn.
+router.onError((err, to) => {
+  const msg = String((err && err.message) || '')
+  if (/dynamically imported module|module script failed|Failed to fetch/i.test(msg)) {
+    const key = 'chunk-reload:' + ((to && to.fullPath) || '')
+    if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, '1')
+      window.location.assign((to && to.fullPath) || window.location.pathname)
+    }
+  }
+})
+
 export default router
