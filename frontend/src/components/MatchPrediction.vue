@@ -32,11 +32,13 @@ const percent = computed(() => {
       hs += pct(cell.home); as += pct(cell.away); n++
     }
   }
-  if (n === 0) {
+  // Không có ô so sánh, HOẶC mọi ô đều 0% (trận mô phỏng/chưa có dữ liệu) -> dùng số gốc API.
+  // (Nếu vẫn chia khi tổng = 0 sẽ ra số vô lý kiểu 0/30/70 dù đội đó thắng.)
+  if (n === 0 || hs + as === 0) {
     const p = pred.value?.percent || {}
     return { home: pct(p.home), draw: pct(p.draw), away: pct(p.away) }
   }
-  const total = hs + as || 1
+  const total = hs + as
   const h = hs / total, a = as / total            // tỉ trọng sức mạnh 2 đội (cộng = 1)
   const diff = Math.abs(h - a)
   let draw = Math.round(30 * (1 - diff))           // hòa CAO khi cân tài (tối đa ~30%), thấp khi lệch
@@ -62,6 +64,7 @@ const rows = computed(() => {
   return meta
     .filter((m) => c[m.key] && (c[m.key].home != null || c[m.key].away != null))
     .map((m) => ({ label: m.label, home: pct(c[m.key].home), away: pct(c[m.key].away) }))
+    .filter((r) => r.home || r.away)   // bỏ hàng 0%/0% (không có dữ liệu thật) cho gọn
 })
 </script>
 
