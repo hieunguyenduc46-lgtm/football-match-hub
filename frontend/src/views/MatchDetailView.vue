@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
-import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, matchTime, matchDayYear, imgFallback } from '../utils/format'
+import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, isBreak, breakStatusKey, matchTime, matchDayYear, imgFallback } from '../utils/format'
 import { roundLabel } from '../utils/roundNames'
 import { leagueName } from '../utils/leagueNames'
 import { setTitle } from '../utils/title'
@@ -300,7 +300,7 @@ onUnmounted(() => clearInterval(timer))
         </div>
         <div style="font-size:20px;font-weight:700" v-else>vs</div>
         <div class="muted" style="margin-top:4px;font-size:13px">
-          <span v-if="isLiveFixture(fixture)" style="color:var(--live)">● {{ fixture.fixture.status.elapsed }}{{ fixture.fixture.status.extra ? '+' + fixture.fixture.status.extra : '' }}'</span>
+          <span v-if="isLiveFixture(fixture)" style="color:var(--live)"><template v-if="isBreak(fixture.fixture.status.short)">● {{ $t(breakStatusKey(fixture.fixture.status.short)) }}</template><template v-else>● {{ fixture.fixture.status.elapsed }}{{ fixture.fixture.status.extra ? '+' + fixture.fixture.status.extra : '' }}'</template></span>
           <span v-else-if="isFinished(fixture.fixture.status.short) || isStaleLive(fixture)">{{ $t('finished') }}</span>
           <span v-else-if="isOff(fixture.fixture.status.short)" style="color:var(--live)">{{ $t(offStatusKey(fixture.fixture.status.short)) }}</span>
           <span v-else>{{ $t('notStarted') }}</span>

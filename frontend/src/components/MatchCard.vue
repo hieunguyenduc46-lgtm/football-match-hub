@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, matchTime, matchDay, imgFallback } from '../utils/format'
+import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, isBreak, breakStatusKey, matchTime, matchDay, imgFallback } from '../utils/format'
 import { teamName } from '../utils/countryNames'
 
 const props = defineProps({
@@ -23,6 +23,9 @@ const finished = computed(() => isFinished(props.fixture.fixture.status.short) |
 // Trận bị huỷ/hoãn -> hiện nhãn riêng thay vì giờ đá (tránh tưởng nhầm "sắp đá").
 const off = computed(() => isOff(props.fixture.fixture.status.short))
 const offLabel = computed(() => offStatusKey(props.fixture.fixture.status.short))
+// Đang nghỉ giữa hiệp (HT/BT/P): hiện nhãn "Giải lao"... thay vì phút.
+const onBreak = computed(() => live.value && isBreak(props.fixture.fixture.status.short))
+const breakLabel = computed(() => breakStatusKey(props.fixture.fixture.status.short))
 // Tỉ số luân lưu (nếu trận đá penalty) -> hiện số nhỏ cạnh tỉ số mỗi đội để biết ai thắng khi hoà.
 const pen = computed(() => {
   const p = props.fixture?.score?.penalty
@@ -41,7 +44,8 @@ function open() {
       <div v-if="showDate" class="mc-date">{{ matchDay(f.fixture.date) }}</div>
       <template v-if="live">
         <div class="live">● LIVE</div>
-        <div>{{ f.fixture.status.elapsed }}{{ f.fixture.status.extra ? '+' + f.fixture.status.extra : '' }}'</div>
+        <div v-if="onBreak">{{ $t(breakLabel) }}</div>
+        <div v-else>{{ f.fixture.status.elapsed }}{{ f.fixture.status.extra ? '+' + f.fixture.status.extra : '' }}'</div>
       </template>
       <template v-else-if="finished">
         <div class="ft">FT</div>

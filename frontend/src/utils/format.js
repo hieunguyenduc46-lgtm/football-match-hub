@@ -20,6 +20,20 @@ export const CANCELLED_STATUSES = ['CANC', 'ABD']
 export function isLive(short) {
   return LIVE_STATUSES.includes(short)
 }
+
+// Trạng thái NGHỈ giữa các pha (cầu thủ KHÔNG đang đá): HT=giải lao, BT=nghỉ trước hiệp phụ,
+// P=đá luân lưu. Khi gặp các trạng thái này nên hiện NHÃN thay vì phút (45+6') để khỏi hiểu
+// nhầm là đang đá. Các trạng thái live khác (1H/2H/ET) vẫn hiện phút như cũ.
+export const BREAK_STATUSES = ['HT', 'BT', 'P']
+export function isBreak(short) {
+  return BREAK_STATUSES.includes(short)
+}
+// Khoá i18n tương ứng từng kiểu nghỉ.
+export function breakStatusKey(short) {
+  if (short === 'HT') return 'halftime'
+  if (short === 'BT') return 'breakTime'
+  return 'penalties' // P
+}
 export function isFinished(short) {
   return FINISHED_STATUSES.includes(short)
 }
