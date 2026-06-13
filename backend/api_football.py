@@ -660,37 +660,61 @@ async def get_events(fixture_id: int) -> list:
     return data.get("response", [])
 
 
-def _has_match_detail(entry: dict) -> bool:
-    """True nếu dòng thống kê có dữ liệu CẤP TRẬN (phút thi đấu hoặc điểm số).
-    Scorer thật của VCK có phút/điểm; số liệu vòng loại bị gộp nhầm thì null hết."""
+# Giải ĐỘI TUYỂN dạng cúp mà API-Football hay GỘP số liệu VÒNG LOẠI vào bảng vua phá lưới
+# (vd World Cup 2018: Immobile/Ý đứng đầu dù Ý không dự VCK — đó là bàn ở vòng loại).
+_QUALIFIER_LEAK_LEAGUES = {
+    1,   # World Cup
+    4,   # Euro
+    9,   # Copa America
+    6,   # Africa Cup of Nations
+    7,   # Asian Cup
+}
+
+
+async def _finalist_team_ids(league: int, season: int) -> set:
+    """Tập id các đội THỰC SỰ dự VCK (đọc từ bảng xếp hạng giải đó). {} nếu chưa có BXH."""
     try:
-        g = entry["statistics"][0]["games"]
-    except (KeyError, IndexError, TypeError):
-        return False
-    return g.get("minutes") is not None or g.get("rating") is not None
+        st = await get_standings(league, season)
+    except Exception:
+        return set()
+    ids = set()
+    for entry in st:
+        for group in ((entry.get("league") or {}).get("standings") or []):
+            for row in group:
+                tid = (row.get("team") or {}).get("id")
+                if tid is not None:
+                    ids.add(tid)
+    return ids
 
 
-def _drop_qualifier_leak(resp: list) -> list:
-    """API-Football đôi khi GỘP số liệu VÒNG LOẠI vào vua phá lưới của giải đấu cúp.
-    Ví dụ World Cup 2018: Immobile (Ý) đứng đầu với 6 bàn dù Ý không dự VCK — đó là
-    bàn ở vòng loại. Các dòng "lọt" này không có dữ liệu cấp trận (phút/điểm = null).
-
-    Quy tắc AN TOÀN: chỉ bỏ dòng rỗng KHI danh sách có CẢ dòng chi tiết lẫn dòng rỗng
-    (đặc trưng của giải đấu cúp). Nếu TẤT CẢ đều rỗng (giải ít dữ liệu như V-League)
-    thì giữ nguyên để không xoá trắng bảng."""
-    if not resp:
+async def _filter_to_finalists(league: int, season: int, resp: list) -> list:
+    """Với giải đội tuyển: CHỈ giữ cầu thủ thuộc đội CÓ trong BXH giải (đội dự VCK) -> bỏ
+    số liệu vòng loại bị gộp nhầm. Dựa vào BXH (KHÔNG dựa số phút) nên scorer thật mới ghi
+    bàn (API chưa kịp cập nhật chi tiết) vẫn được giữ. Giải khác hoặc chưa có BXH -> giữ nguyên."""
+    if not resp or league not in _QUALIFIER_LEAK_LEAGUES:
         return resp
-    detailed = [p for p in resp if _has_match_detail(p)]
-    if detailed and len(detailed) < len(resp):
-        return detailed
-    return resp
+    ids = await _finalist_team_ids(league, season)
+    if not ids:
+        return resp  # chưa có BXH (giải chưa khởi tranh) -> không lọc để khỏi xoá trắng
+    in_finals = [p for p in resp if ((p.get("statistics") or [{}])[0].get("team") or {}).get("id") in ids]
+    if not in_finals:
+        return resp
+    # Edition ĐANG diễn ra (mùa được GHIM ở LEAGUE_SEASON): chỉ lọc theo BXH. KHÔNG dựa số phút
+    # vì scorer vừa ghi bàn có thể chưa được API cập nhật phút (sẽ bị bỏ nhầm như bug Balogun).
+    if season == config.LEAGUE_SEASON.get(league):
+        return in_finals
+    # Edition ĐÃ KẾT THÚC: lọc chặt thêm — bỏ dòng KHÔNG có phút thi đấu ở VCK (số liệu vòng loại
+    # bị gộp nhầm dù đội có dự VCK, vd Morata/TBN 2018 ghi 5 bàn vòng loại nhưng không đá VCK).
+    played = [p for p in in_finals
+              if ((p.get("statistics") or [{}])[0].get("games") or {}).get("minutes") is not None]
+    return played or in_finals
 
 
 async def get_topscorers(league: int, season: int = 2025) -> list:
     if settings.use_mock:
         return mock_data.topscorers_for(league)
     data = await _request("/players/topscorers", {"league": league, "season": season}, ttl=STATIC_TTL)
-    return _drop_qualifier_leak(data.get("response", []))
+    return await _filter_to_finalists(league, season, data.get("response", []))
 
 
 async def get_topassists(league: int, season: int = 2025) -> list:
@@ -698,7 +722,7 @@ async def get_topassists(league: int, season: int = 2025) -> list:
     if settings.use_mock:
         return mock_data.topscorers_for(league)
     data = await _request("/players/topassists", {"league": league, "season": season}, ttl=STATIC_TTL)
-    return _drop_qualifier_leak(data.get("response", []))
+    return await _filter_to_finalists(league, season, data.get("response", []))
 
 
 async def get_topyellowcards(league: int, season: int = 2025) -> list:
@@ -706,7 +730,7 @@ async def get_topyellowcards(league: int, season: int = 2025) -> list:
     if settings.use_mock:
         return mock_data.topscorers_for(league)
     data = await _request("/players/topyellowcards", {"league": league, "season": season}, ttl=STATIC_TTL)
-    return _drop_qualifier_leak(data.get("response", []))
+    return await _filter_to_finalists(league, season, data.get("response", []))
 
 
 async def get_topredcards(league: int, season: int = 2025) -> list:
@@ -714,7 +738,7 @@ async def get_topredcards(league: int, season: int = 2025) -> list:
     if settings.use_mock:
         return mock_data.topscorers_for(league)
     data = await _request("/players/topredcards", {"league": league, "season": season}, ttl=STATIC_TTL)
-    return _drop_qualifier_leak(data.get("response", []))
+    return await _filter_to_finalists(league, season, data.get("response", []))
 
 
 async def get_statistics(fixture_id: int) -> list:
