@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 import api_football
-from config import CALENDAR_YEAR_LEAGUES, default_season, settings
+from config import CALENDAR_YEAR_LEAGUES, LEAGUE_SEASON, default_season, settings
 
 router = APIRouter(prefix="/api", tags=["fixtures"])
 
@@ -21,7 +21,11 @@ async def list_fixtures(date: Optional[str] = None, league: Optional[int] = None
         # Suy season từ ngày; date sai định dạng (vd "abc") thì rơi về season mặc định
         # thay vì ném ValueError -> tránh trả 500 cho người gọi.
         try:
-            if date and len(date) >= 7:
+            if league in LEAGUE_SEASON:
+                # Giải đặc biệt (World Cup 2026, ...): mùa GHIM cứng, KHÔNG suy theo tháng.
+                # (Trước đây WC ngày 13/6 bị suy thành 2025 -> lọc ra rỗng dù có trận.)
+                season = LEAGUE_SEASON[league]
+            elif date and len(date) >= 7:
                 y, m = int(date[:4]), int(date[5:7])
                 if league in CALENDAR_YEAR_LEAGUES:
                     season = y                       # giải năm dương lịch: dùng đúng năm
