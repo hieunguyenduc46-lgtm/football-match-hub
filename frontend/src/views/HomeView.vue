@@ -95,9 +95,11 @@ const leagues = ref([])
 const selectedLeague = ref('') // '' = tất cả
 
 async function load(silent = false) {
-  const params = { date: selectedDate.value, tz } // tz = múi giờ người xem
-  if (selectedLeague.value) params.league = selectedLeague.value
-  await store.fetchFixtures(params, { silent })
+  // LUÔN tải mọi trận trong ngày (chỉ theo date + tz), KHÔNG lọc giải ở backend.
+  // Lý do: lọc theo giải ở API bắt buộc kèm "season", mà không thể đoán đúng mùa cho mọi
+  // giải (Nam Mỹ/Bắc Âu chạy năm dương lịch, châu Âu vắt 2 năm, World Cup ghim năm...).
+  // -> Lọc giải làm Ở CLIENT từ danh sách đầy đủ này (xem computed `grouped`) cho chuẩn mọi giải.
+  await store.fetchFixtures({ date: selectedDate.value, tz }, { silent })
 }
 
 // Thứ tự ưu tiên trong mỗi giải: đang đá (0) -> sắp đá (1) -> đã kết thúc (2).
@@ -111,9 +113,11 @@ function matchRank(f) {
 // Gom theo giải, rồi sắp xếp mỗi giải: live lên đầu, kế đến trận chưa đá (theo giờ),
 // cuối cùng là trận đã xong. Cùng nhóm thì xếp theo giờ đá tăng dần.
 const grouped = computed(() => {
+  const lf = selectedLeague.value ? Number(selectedLeague.value) : null   // giải đang lọc (nếu có)
   const map = {}
   for (const f of fixtures.value) {
     if (!f?.league?.id) continue          // bỏ qua fixture thiếu league -> tránh crash
+    if (lf && f.league.id !== lf) continue // lọc theo giải đã chọn (client-side, đúng mọi giải)
     const key = f.league.id
     if (!map[key]) map[key] = { league: f.league, matches: [] }
     map[key].matches.push(f)
@@ -129,7 +133,8 @@ const grouped = computed(() => {
   return groups
 })
 
-watch([selectedDate, selectedLeague], () => load())
+// Chỉ đổi NGÀY mới cần tải lại từ API; đổi GIẢI thì `grouped` tự lọc lại (không gọi API thừa).
+watch(selectedDate, () => load())
 
 // Auto-refresh: làm mới ngầm (nhịp 15s) để cập nhật tỉ số trận đang đá.
 // 15s = nhịp làm tươi của API-Football (poll nhanh hơn cũng không có dữ liệu mới).
