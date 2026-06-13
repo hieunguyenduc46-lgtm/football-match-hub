@@ -58,9 +58,9 @@ export function roundLabel(round) {
   if (/3rd place|third place/.test(r)) return D.third
   if (/semi/.test(r)) return D.semi
   if (/quarter/.test(r)) return D.quarter
-  if (/round of 16|1\/8/.test(r)) return D.r16
-  if (/round of 32|1\/16/.test(r)) return D.r32
-  if (/round of 64|1\/32/.test(r)) return D.r64
+  if (/round of 16|1\/8|8th final/.test(r)) return D.r16
+  if (/round of 32|1\/16|16th final/.test(r)) return D.r32
+  if (/round of 64|1\/32|32nd final/.test(r)) return D.r64
   if (/knockout round play|knockout play/.test(r)) return D.knockoutPlayoff
   if (/\bfinal\b/.test(r)) return D.final
   if (/preliminary/.test(r)) return D.preliminary

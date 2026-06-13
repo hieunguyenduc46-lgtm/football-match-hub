@@ -866,6 +866,11 @@ async def get_league_seasons(league_id: int) -> list:
     return out
 
 
+# Cúp CLB UEFA (C1/C2/C3): vòng tên TRƠ "Play-offs" là VÒNG LOẠI (trước league stage),
+# không thuộc nhánh đấu chính -> bỏ. ("Knockout Round Play-offs" = play-off 1/8 mới thì GIỮ.)
+_UEFA_CLUB_CUPS = {2, 3, 848}
+
+
 async def get_bracket(league_id: int, season: Optional[int] = None) -> list:
     """Các trận VÒNG LOẠI TRỰC TIẾP (knockout) của giải -> client dựng SƠ ĐỒ NHÁNH ĐẤU.
     Trả [] nếu giải không có vòng knockout (vd VĐQG) -> client ẩn tab.
@@ -878,8 +883,11 @@ async def get_bracket(league_id: int, season: Optional[int] = None) -> list:
     out = []
     for f in data.get("response", []):
         rnd = ((f.get("league") or {}).get("round") or "")
-        # Vòng knockout (R16/QF/SF/Final/play-off...), BỎ vòng bảng / VĐQG / lượt league-stage.
-        if re.search(r"round of|quarter|semi|\bfinal\b|play-?off|1/\d|last \d+", rnd, re.IGNORECASE) \
+        # UEFA: vòng tên trơ "Play-offs" = vòng loại trước league stage -> bỏ khỏi nhánh đấu.
+        if league_id in _UEFA_CLUB_CUPS and re.fullmatch(r"\s*play-?offs?\s*", rnd, re.IGNORECASE):
+            continue
+        # Vòng knockout (R16/R32/QF/SF/Final/play-off/"8th|16th Finals"...), BỎ vòng bảng / VĐQG / vòng loại.
+        if re.search(r"round of|quarter|semi|\bfinal\b|\d+(?:st|nd|rd|th)\s+finals?|play-?off|1/\d|last \d+", rnd, re.IGNORECASE) \
                 and not re.search(r"group|regular season|league stage|qualif", rnd, re.IGNORECASE):
             out.append(f)
     return out

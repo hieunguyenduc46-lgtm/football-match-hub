@@ -16,10 +16,14 @@ function roundRank(r) {
   if (/3rd place|third place|play-off for/.test(s)) return -1
   if (/semi|1\/2/.test(s)) return 6
   if (/quarter|1\/4|last 8/.test(s)) return 5
-  if (/round of 16|1\/8|last 16/.test(s)) return 4
-  if (/round of 32|1\/16|round of 64/.test(s)) return 3
-  if (/knockout|play-?off/.test(s)) return 2
+  // "8th Finals" = vòng 1/8 (R16); "16th Finals" = vòng 1/16 (R32) — API World Cup hay dùng kiểu này.
+  if (/round of 16|1\/8|last 16|8th final/.test(s)) return 4
+  if (/round of 32|1\/16|16th final/.test(s)) return 3
+  if (/round of 64|1\/32|32nd final/.test(s)) return 2
+  // Vòng play-off 1/8 của thể thức league-phase mới (C1/C2/C3) — xét TRƯỚC play-off chung.
+  if (/knockout round play|knockout play/.test(s)) return 2
   if (/\bfinal\b/.test(s)) return 7
+  if (/play-?off/.test(s)) return 1
   return 0
 }
 
