@@ -15,6 +15,8 @@ const routes = [
   { path: '/country/:name', name: 'country', component: () => import('../views/CountryView.vue') },
   { path: '/favorites', name: 'favorites', component: () => import('../views/FavoritesView.vue') },
   { path: '/compare', name: 'compare', component: () => import('../views/CompareView.vue') },
+  // Bắt MỌI đường dẫn còn lại (URL sai / link cũ) -> trang 404 thân thiện. ĐẶT CUỐI CÙNG.
+  { path: '/:pathMatch(.*)*', name: 'notfound', component: () => import('../views/NotFoundView.vue') },
 ]
 
 const router = createRouter({
