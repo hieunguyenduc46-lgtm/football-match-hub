@@ -672,11 +672,12 @@ _QUALIFIER_LEAK_LEAGUES = {
 
 
 async def _finalist_team_ids(league: int, season: int) -> set:
-    """Tập id các đội THỰC SỰ dự VCK (đọc từ bảng xếp hạng giải đó). {} nếu chưa có BXH."""
+    """Tập id các đội THỰC SỰ dự VCK. Ưu tiên BẢNG XẾP HẠNG; nếu API thiếu BXH (mùa cũ) thì
+    fallback đọc từ LỊCH THI ĐẤU của giải (đội nào có đá ở VCK). {} nếu không xác định được."""
     try:
         st = await get_standings(league, season)
     except Exception:
-        return set()
+        st = []
     ids = set()
     for entry in st:
         for group in ((entry.get("league") or {}).get("standings") or []):
@@ -684,30 +685,51 @@ async def _finalist_team_ids(league: int, season: int) -> set:
                 tid = (row.get("team") or {}).get("id")
                 if tid is not None:
                     ids.add(tid)
+    if ids:
+        return ids
+    # Fallback: đội có mặt trong LỊCH THI ĐẤU VCK (league=finals nên không lẫn vòng loại).
+    try:
+        data = await _request("/fixtures", {"league": league, "season": season}, ttl=STATIC_TTL)
+    except Exception:
+        return set()
+    for f in data.get("response", []):
+        for side in ("home", "away"):
+            tid = (((f.get("teams") or {}).get(side)) or {}).get("id")
+            if tid is not None:
+                ids.add(tid)
     return ids
 
 
+def _has_match_detail(p: dict) -> bool:
+    """True nếu dòng có DỮ LIỆU CẤP TRẬN (phút hoặc điểm) -> đã đá ở VCK. Số liệu vòng loại
+    bị gộp nhầm thường để trống cả hai."""
+    g = (p.get("statistics") or [{}])[0].get("games") or {}
+    return g.get("minutes") is not None or g.get("rating") is not None
+
+
 async def _filter_to_finalists(league: int, season: int, resp: list) -> list:
-    """Với giải đội tuyển: CHỈ giữ cầu thủ thuộc đội CÓ trong BXH giải (đội dự VCK) -> bỏ
-    số liệu vòng loại bị gộp nhầm. Dựa vào BXH (KHÔNG dựa số phút) nên scorer thật mới ghi
-    bàn (API chưa kịp cập nhật chi tiết) vẫn được giữ. Giải khác hoặc chưa có BXH -> giữ nguyên."""
+    """Vua phá lưới/kiến tạo/thẻ giải ĐỘI TUYỂN: bỏ số liệu VÒNG LOẠI bị API gộp nhầm.
+    Lọc theo ĐỘI DỰ VCK (từ BXH hoặc lịch đấu) — KHÔNG dựa số phút nên không bỏ nhầm scorer
+    thật. Giải khác -> giữ nguyên."""
     if not resp or league not in _QUALIFIER_LEAK_LEAGUES:
         return resp
+    ongoing = (season == config.LEAGUE_SEASON.get(league))
     ids = await _finalist_team_ids(league, season)
     if not ids:
-        return resp  # chưa có BXH (giải chưa khởi tranh) -> không lọc để khỏi xoá trắng
+        return resp  # không xác định được đội dự VCK -> để nguyên, tránh xoá nhầm
     in_finals = [p for p in resp if ((p.get("statistics") or [{}])[0].get("team") or {}).get("id") in ids]
     if not in_finals:
         return resp
-    # Edition ĐANG diễn ra (mùa được GHIM ở LEAGUE_SEASON): chỉ lọc theo BXH. KHÔNG dựa số phút
-    # vì scorer vừa ghi bàn có thể chưa được API cập nhật phút (sẽ bị bỏ nhầm như bug Balogun).
-    if season == config.LEAGUE_SEASON.get(league):
-        return in_finals
-    # Edition ĐÃ KẾT THÚC: lọc chặt thêm — bỏ dòng KHÔNG có phút thi đấu ở VCK (số liệu vòng loại
-    # bị gộp nhầm dù đội có dự VCK, vd Morata/TBN 2018 ghi 5 bàn vòng loại nhưng không đá VCK).
-    played = [p for p in in_finals
-              if ((p.get("statistics") or [{}])[0].get("games") or {}).get("minutes") is not None]
-    return played or in_finals
+    if ongoing:
+        return in_finals  # đang đá: chỉ lọc theo đội, không dựa số phút (tránh bug Balogun)
+    # ĐÃ kết thúc: bỏ thêm dòng KHÔNG có phút (vòng loại gộp nhầm dù đội dự VCK, vd Morata/TBN
+    # 2018 ghi bàn vòng loại nhưng không đá VCK) — NHƯNG chỉ khi dữ liệu phút ĐỦ TỐT (>= nửa số
+    # dòng có chi tiết). Mùa quá cũ API thiếu phút cho cả scorer thật (vd Villa Euro 2008) thì
+    # giữ nguyên in_finals để khỏi bỏ nhầm.
+    detailed = [p for p in in_finals if _has_match_detail(p)]
+    if detailed and len(detailed) >= len(in_finals) * 0.5:
+        return detailed
+    return in_finals
 
 
 async def get_topscorers(league: int, season: int = 2025) -> list:
