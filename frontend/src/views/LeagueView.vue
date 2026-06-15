@@ -124,7 +124,21 @@ function subStat(s) {
 }
 
 // standings = mảng các "bảng" (giải thường: 1 bảng; World Cup: 8 bảng A–H).
-const groups = computed(() => raw.value?.league?.standings || [])
+// KHỬ TRÙNG LẶP đội trong mỗi bảng theo id: API đôi khi trả mỗi đội 2 lần (vd World Cup
+// 2026 -> 8 dòng/4 đội). Giữ dòng ĐẦU mỗi đội để bảng không bị lặp.
+const groups = computed(() => {
+  const raws = raw.value?.league?.standings || []
+  return raws.map((g) => {
+    const seen = new Set()
+    return (g || []).filter((row) => {
+      const id = row?.team?.id
+      if (id == null) return true
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+  })
+})
 const leagueName = computed(() => translateLeague(raw.value?.league?.name, raw.value?.league?.id ?? route.params.id) || t('league_default'))
 
 // Dữ liệu để FOLLOW giải (lưu id + tên gốc + logo). Logo lấy từ standings, thiếu thì dựng theo id.
