@@ -103,20 +103,18 @@ CAREER_BASELINE = {
     # 2026 (API đang là 22) -> 889 + 22 = 911 ngay bây giờ, và tự tăng khi Messi ghi thêm.
     # (API tự cộng toàn bộ ra sai vì thiếu dữ liệu mùa cũ 2004–2015, nên phải neo phần cũ.)
     154: {"goals": 889, "through": 2025},
-    # Neymar (id 276) — 491 bàn official (Santos/Barça/PSG/Al-Hilal + Brazil), tính ~06/2026.
-    # Nguồn: Wikipedia/FotMob. (Đã trở lại Santos đầu 2026.)
-    276: {"goals": 491, "through": 2026},
-    # Karim Benzema (id 759) — vượt mốc 500 bàn ngày 30/08/2025; ước ~515 tính tới ~06/2026
-    # (Lyon/Real Madrid/Al-Ittihad + France). Nguồn: Wikipedia/StatMuse. *Số ước lượng, chỉnh tay nếu cần.
-    759: {"goals": 515, "through": 2026},
-    # Kylian Mbappé (id 278) — chạm mốc 400 bàn ngày 13/11/2025 (CLB 345: Monaco 27 + PSG 256 +
-    # Real 62; Pháp 55). Sau đó đá nốt mùa 25/26 (riêng La Liga ~25 bàn) -> ước ~430 tính tới ~06/2026.
-    # Nguồn: ESPN/SI/Tribuna (mốc 400). *Số hiện tại là ước lượng, chỉnh tay 1 số nếu muốn chính xác hơn.
-    278: {"goals": 430, "through": 2026},
-    # Erling Haaland (id 1100) — 372 bàn official (CLB 317: Bryne/Molde/Salzburg/Dortmund/
-    # Man City + Na Uy 55), tính ~06/2026. Nguồn: Wikipedia. API-Football tự cộng chỉ ra 342
-    # do thiếu dữ liệu các mùa đầu sự nghiệp (Bryne/Molde/Salzburg 2016–2019) -> neo tay cho chuẩn.
-    # `through` đặt cao (2026) để KHÔNG cộng thêm mùa nào -> hiển thị đúng 372; ghi thêm bàn thì
-    # tăng số này lên (cập nhật vài tháng/lần), giống cách làm với Messi/Neymar.
-    1100: {"goals": 372, "through": 2026},
+    # Neymar (id 276) — TỔNG official ~491 (Santos/Barça/PSG/Al-Hilal + Brazil), tính ~06/2026.
+    # through=2025 + baseline 483 -> 483 + (Santos mùa 2026, API đang đếm 8) = 491; bàn mới TỰ CỘNG.
+    276: {"goals": 483, "through": 2025},
+    # Karim Benzema (id 759) — TỔNG official ~515 (Lyon/Real/Al-Ittihad + France), tính ~06/2026.
+    # through=2025 -> mùa 2026 (API đang 0) tự cộng khi ghi bàn. Nguồn: Wikipedia/StatMuse.
+    759: {"goals": 515, "through": 2025},
+    # Kylian Mbappé (id 278) — TỔNG official ~430 tính ĐẾN HẾT mùa CLB 25/26 (= mùa 2025 trong API:
+    # Monaco 27 + PSG 256 + Real + Pháp). through=2025 -> bàn mùa 2026 (World Cup hè 2026 + CLB 26/27)
+    # do API tự cộng (hiện 0 -> vẫn 430; ghi bàn ở WC sẽ tự thành 432...). KHÔNG cần chỉnh tay.
+    278: {"goals": 430, "through": 2025},
+    # Erling Haaland (id 1100) — TỔNG official ~372 (CLB Bryne/Molde/Salzburg/Dortmund/Man City +
+    # Na Uy), tính ~06/2026. API thiếu mùa đầu (Bryne/Molde 2016–2019) nên neo tay phần cũ.
+    # through=2025 + baseline 370 -> 370 + (mùa 2026 API đang 2) = 372; bàn mới TỰ CỘNG.
+    1100: {"goals": 370, "through": 2025},
 }
