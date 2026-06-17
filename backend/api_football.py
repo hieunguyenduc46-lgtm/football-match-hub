@@ -792,7 +792,10 @@ async def get_h2h(fixture_id: int, home: int, away: int) -> list:
     if settings.use_mock:
         return mock_data.h2h_for(fixture_id)
     data = await _request("/fixtures/headtohead", {"h2h": f"{home}-{away}", "last": 10}, ttl=STATIC_TTL)
-    return data.get("response", [])
+    resp = data.get("response", [])
+    # Loại CHÍNH trận đang xem khỏi H2H — H2H chỉ tính các lần gặp TRƯỚC ĐÓ. Nếu không, trận
+    # hiện tại (đang đá / số liệu chưa chốt, vd kẹt ở 1H 1-0) bị đếm nhầm vào thắng/hòa/thua.
+    return [m for m in resp if ((m.get("fixture") or {}).get("id")) != fixture_id]
 
 
 async def get_team_fixtures(team_id: int, last: int = 5) -> list:
