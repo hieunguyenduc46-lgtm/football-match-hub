@@ -322,6 +322,33 @@ def _apply_stat_overrides(player_id: int, season: int, resp: list) -> list:
     return resp
 
 
+async def _merge_world_cup_stats(player_id: int, resp: list) -> list:
+    """Gộp thêm thống kê WORLD CUP (đội tuyển, mùa 2026) vào hồ sơ cầu thủ. WC nằm ở mùa CALENDAR
+    2026, KHÔNG có trong mùa CLB châu Âu (default 2025) -> nếu không gộp thì bảng thiếu mục đội
+    tuyển (vd Mbappé ghi bàn WC nhưng không hiện). Đội KHÔNG dự WC -> không có dòng nào -> giữ
+    nguyên. Frontend tự xếp mục World Cup vào nhóm ĐTQG (splitStats)."""
+    wc_season = config.LEAGUE_SEASON.get(1)
+    if not resp or not wc_season:
+        return resp
+    try:
+        wc = await _request("/players", {"id": player_id, "season": wc_season}, ttl=STATIC_TTL)
+        wc_resp = wc.get("response") or []
+    except Exception:
+        return resp
+    wc_stats = (wc_resp[0].get("statistics") if wc_resp else None) or []
+    wc_entries = [s for s in wc_stats if ((s.get("league") or {}).get("id")) == 1]
+    if not wc_entries:
+        return resp
+    resp = copy.deepcopy(resp)  # KHÔNG sửa object trong cache (dùng chung với career/motm)
+    stats = resp[0].setdefault("statistics", [])
+    have = {((s.get("team") or {}).get("id"), (s.get("league") or {}).get("id")) for s in stats}
+    for e in wc_entries:
+        key = ((e.get("team") or {}).get("id"), (e.get("league") or {}).get("id"))
+        if key not in have:  # tránh chèn trùng nếu đã có
+            stats.append(e)
+    return resp
+
+
 async def get_player(player_id: int, season: int = 2025) -> list:
     # Chỉ trả dữ liệu của ĐÚNG mùa đang xem. Frontend tự tách CLB vs ĐTQG;
     # nếu mùa đó không có trận ĐTQG thì phần đội tuyển để trống (không lấy mùa khác).
@@ -352,6 +379,8 @@ async def get_player(player_id: int, season: int = 2025) -> list:
                     return _apply_stat_overrides(player_id, cur_year, cy_resp)
             except Exception:
                 pass
+    # CLB châu Âu (mùa default 2025): gộp thêm thống kê World Cup mùa 2026 để hiện mục đội tuyển.
+    resp = await _merge_world_cup_stats(player_id, resp)
     return _apply_stat_overrides(player_id, season, resp)
 
 

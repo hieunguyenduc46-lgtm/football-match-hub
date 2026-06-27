@@ -109,10 +109,10 @@ CAREER_BASELINE = {
     # Karim Benzema (id 759) — TỔNG official ~515 (Lyon/Real/Al-Ittihad + France), tính ~06/2026.
     # through=2025 -> mùa 2026 (API đang 0) tự cộng khi ghi bàn. Nguồn: Wikipedia/StatMuse.
     759: {"goals": 515, "through": 2025},
-    # Kylian Mbappé (id 278) — TỔNG official ~430 tính ĐẾN HẾT mùa CLB 25/26 (= mùa 2025 trong API:
-    # Monaco 27 + PSG 256 + Real + Pháp). through=2025 -> bàn mùa 2026 (World Cup hè 2026 + CLB 26/27)
-    # do API tự cộng (hiện 0 -> vẫn 430; ghi bàn ở WC sẽ tự thành 432...). KHÔNG cần chỉnh tay.
-    278: {"goals": 430, "through": 2025},
+    # Kylian Mbappé (id 278) — TỔNG official 429 (chỉnh tay theo số thực tế). baseline 425 +
+    # bàn mùa 2026 API đang đếm (hiện 4 bàn World Cup) = 429. through=2025 -> bàn mới ở WC/giải
+    # chính thức do API TỰ CỘNG, không cần chỉnh tay.
+    278: {"goals": 425, "through": 2025},
     # Erling Haaland (id 1100) — TỔNG official ~372 (CLB Bryne/Molde/Salzburg/Dortmund/Man City +
     # Na Uy), tính ~06/2026. API thiếu mùa đầu (Bryne/Molde 2016–2019) nên neo tay phần cũ.
     # through=2025 + baseline 370 -> 370 + (mùa 2026 API đang 2) = 372; bàn mới TỰ CỘNG.
