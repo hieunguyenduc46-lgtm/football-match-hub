@@ -148,15 +148,17 @@ async def _team_primary_league(team_id: int, season: int):
     data = await _request("/leagues", {"team": team_id, "season": season}, ttl=STATIC_TTL)
     leagues = data.get("response", [])
     pick = None
+    is_league = False  # True nếu tìm được giải VĐQG thật (đội CLB); False = đội tuyển (chỉ cúp)
     for lg in leagues:
         if ((lg.get("league") or {}).get("type") or "").lower() == "league":
             pick = lg["league"]
+            is_league = True
             break
     if not pick and leagues:
         pick = leagues[0].get("league")
     if not pick:
-        return (None, None, None)
-    return (pick.get("id"), pick.get("name"), pick.get("logo"))
+        return (None, None, None, False)
+    return (pick.get("id"), pick.get("name"), pick.get("logo"), is_league)
 
 
 async def get_team_statistics(team_id: int) -> dict:
@@ -165,12 +167,28 @@ async def get_team_statistics(team_id: int) -> dict:
     if settings.use_mock:
         return {}
     season = config.default_season()
-    lid, lname, llogo = await _team_primary_league(team_id, season)
+    lid, lname, llogo, is_league = await _team_primary_league(team_id, season)
     if not lid:
         season -= 1
-        lid, lname, llogo = await _team_primary_league(team_id, season)
+        lid, lname, llogo, is_league = await _team_primary_league(team_id, season)
     if not lid:
         return {}
+    # ĐỘI TUYỂN (không có giải VĐQG) đang dự World Cup: ưu tiên thống kê World Cup ĐANG diễn ra,
+    # thay vì giải mùa trước (Euro/Nations League) mà heuristic chọn nhầm. CLB (is_league=True)
+    # bỏ qua nhánh này nên KHÔNG tốn thêm request và giữ nguyên hành vi cũ.
+    if not is_league:
+        wc_season = config.LEAGUE_SEASON.get(1)
+        if wc_season:
+            wc = await _request(
+                "/teams/statistics", {"team": team_id, "league": 1, "season": wc_season}, ttl=STATIC_TTL
+            )
+            wcr = wc.get("response") or {}
+            played = ((wcr.get("fixtures") or {}).get("played") or {}).get("total") or 0
+            if played > 0:
+                wcr["_league"] = {"id": 1, "name": "World Cup",
+                                  "logo": "https://media.api-sports.io/football/leagues/1.png",
+                                  "season": wc_season}
+                return wcr
     data = await _request(
         "/teams/statistics", {"team": team_id, "league": lid, "season": season}, ttl=STATIC_TTL
     )
