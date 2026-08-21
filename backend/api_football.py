@@ -398,7 +398,12 @@ def _is_official_goal_entry(stat: dict) -> bool:
 
 
 async def _sum_official_goals(player_id: int, seasons: list) -> int:
-    """Cộng bàn official (CLB + tuyển A, bỏ giao hữu/đội trẻ) qua các mùa cho trước."""
+    """Cộng bàn official (CLB + tuyển A, bỏ giao hữu/đội trẻ) qua các mùa cho trước.
+    ÁP DỤNG STAT_OVERRIDES trước khi cộng để tổng career KHỚP với BẢNG hiển thị từng giải.
+    Vì sao cần: có dòng API trả sai (vd King's Cup của Ronaldo bị GỘP cộng dồn ~14 bàn ma,
+    override sửa về 0) hoặc THIẾU (vd Super Cup, override ADD 1 bàn). Nếu đọc thô, career bị
+    thổi phồng/lệch so với bảng. Override chỉ tác động khi có rule (player_id, season) -> cầu
+    thủ khác không bị ảnh hưởng."""
     total = 0
     for s in seasons:
         try:
@@ -406,6 +411,7 @@ async def _sum_official_goals(player_id: int, seasons: list) -> int:
             resp = data.get("response", [])
         except Exception:
             continue
+        resp = _apply_stat_overrides(player_id, s, resp)   # sửa/thêm dòng giải như bảng hiển thị
         for st in (resp[0].get("statistics", []) if resp else []):
             if _is_official_goal_entry(st):
                 total += (st.get("goals") or {}).get("total") or 0
