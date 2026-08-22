@@ -572,16 +572,18 @@ async def get_player_history(player_id: int) -> dict:
 # Hiển thị = base + số MOTM ở các trận đá SAU ngày "since" (tính theo rating như bình thường).
 # -> Số neo là "sàn", và TỰ ĐỘNG cộng thêm khi có trận mới được MOTM.
 MOTM_ANCHORS = {
-    (874, 2025): {"base": 8, "since": "2026-06-07"},  # Cristiano Ronaldo
-    (154, 2025): {"base": 4, "since": "2026-06-07"},  # Lionel Messi
+    # Mùa 2026/27: KHÔNG neo base -> POTM tự tính TRỌN mùa từ 0 (since=None: quét hết trận mùa
+    # 2026), tự tăng khi có MOTM mới. Neo cũ (Ronaldo base 8 / Messi base 4) là của mùa 2025/26
+    # ĐÃ XONG -> bỏ đi, nếu giữ + đổi khoá sang 2026 sẽ cộng dồn dư 8/4 vào mùa mới.
+    # Muốn neo lại về sau: thêm {(player_id, 2026): {"base": N, "since": "YYYY-MM-DD"}}.
 }
 
 # Cầu thủ tính MOTM theo "ĐỘI NHÀ" (rating cao nhất TRONG đội của cầu thủ ở trận đó).
 # MẶC ĐỊNH mọi người khác tính theo "CẢ 2 ĐỘI" (phải cao nhất trong tất cả cầu thủ trên
 # sân). Lý do: ở đội yếu/giải nhẹ (vd Messi ở MLS) cách "đội nhà" cho số cao bất thường.
 MOTM_TEAM_SCOPED = {
-    (583, 2025),   # João Félix — Al-Nassr
-    (278, 2025),   # Kylian Mbappé — Real Madrid
+    (583, 2026),   # João Félix
+    (278, 2026),   # Kylian Mbappé
 }
 
 
