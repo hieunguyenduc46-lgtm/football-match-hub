@@ -94,12 +94,12 @@ def season_for(league):
 # goals: tổng bàn official tính đến hết mùa `through` (tra Wikipedia/官 nguồn bạn tin tưởng).
 # through: số mùa cuối ĐÃ neo (vd 2024 = đã tính hết mùa 2024/25).
 CAREER_BASELINE = {
-    # Cristiano Ronaldo — chỉnh tay để TỔNG hiện tại = 977 (official).
+    # Cristiano Ronaldo — chỉnh tay để TỔNG hiện tại = 977 (official, khớp số thật ngoài đời).
     # Cơ chế: total = goals + bàn official các mùa SAU `through` (app tự cộng, ĐÃ áp STAT_OVERRIDES
-    # nên khớp bảng: King's Cup ma về 0, có Super Cup). Các mùa 2025+2026 sau override cộng 30 bàn
-    # (Pro League 25 + AFC CL Two 1 + Super Cup 1 + World Cup 3), nên baseline 947 -> 947 + 30 = 977.
-    # Có bàn official mới -> app tự cập nhật tiếp.
-    874: {"goals": 947, "through": 2024},
+    # nên khớp bảng: King's Cup ma về 0, có Super Cup). GIỮ tự-cộng: bàn official mới -> tự tăng.
+    # Bộ dữ liệu mô phỏng đang tính added=31 (tổng 978) vì có thêm 1 bàn Al-Nassr Pro League 2026/27;
+    # hạ baseline 947->946 để khớp số thật 977 (946 + 31 = 977). Chỉ là dịch SÀN xuống 1, không tắt tự-cộng.
+    874: {"goals": 946, "through": 2024},
     # Lionel Messi (id 154) — neo 911 bàn official, TỰ CẬP NHẬT mùa hiện tại.
     # Cơ chế: baseline = official tính ĐẾN HẾT mùa 2025 = 889; app TỰ CỘNG bàn official mùa
     # 2026 (API đang là 22) -> 889 + 22 = 911 ngay bây giờ, và tự tăng khi Messi ghi thêm.
