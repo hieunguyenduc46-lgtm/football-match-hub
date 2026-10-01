@@ -10,7 +10,9 @@ export default defineConfig({
     outputFile: { junit: 'reports/junit.xml' },
     coverage: {
       provider: 'v8',
-      include: ['src/utils/**/*.js'],
+      // Logic that is unit tested: helpers, translations, Pinia stores.
+      // Vue page components are checked end-to-end by the pipeline's smoke tests instead.
+      include: ['src/utils/**/*.js', 'src/i18n.js', 'src/stores/**/*.js'],
       reporter: ['text', 'lcov'],
       reportsDirectory: 'coverage',
     },

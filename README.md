@@ -35,7 +35,7 @@ flowchart LR
 | # | Stage | What happens | Gate |
 |---|---|---|---|
 | 1 | **Build** | Python venv + dependencies, `npm ci`, Vite production build, Docker images `fmh-backend` and `fmh-frontend` tagged `1.0.<build>-<commit>` | Any build error |
-| 2 | **Test** | 75 backend tests (pytest: unit, integration, security, smoke) and 28 frontend tests (Vitest); JUnit + coverage reports published in Jenkins | Any failing test |
+| 2 | **Test** | 75 backend tests (pytest: unit, integration, security, smoke) and 40 frontend tests (Vitest); JUnit + coverage reports published in Jenkins | Any failing test |
 | 3 | **Code Quality** | SonarCloud analysis (bugs, code smells, duplication, coverage) | SonarCloud Quality Gate |
 | 4 | **Security** | Bandit (Python SAST), pip-audit and npm audit (dependencies), Trivy (Docker images and Dockerfiles); reports archived | See thresholds below |
 | 5 | **Deploy** | Staging environment with Docker Compose (`deploy/`), mock data | Smoke test: health, version, frontend, API proxy |
