@@ -26,3 +26,7 @@ frontend/vite.config.js.timestamp-*
 coverage.xml
 coverage/
 reports/
+
+# Local SonarScanner / CI working files
+.scannerwork/
+sonar-scanner-*/

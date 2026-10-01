@@ -1,5 +1,5 @@
 // Football Match Hub - Jenkins CI/CD pipeline (SIT223/SIT753 Task 7.3HD)
-// Stages so far: Build -> Test. Code Quality, Security, Deploy, Release and Monitoring are added next.
+// Stages so far: Build -> Test -> Code Quality -> Security. Deploy, Release and Monitoring are added next.
 
 pipeline {
     agent any
@@ -24,6 +24,12 @@ pipeline {
         FRONTEND_IMAGE = 'fmh-frontend'
         // Tests and CI never call the paid API.
         USE_MOCK = 'true'
+        // Python 3.13 (from Anaconda on this Mac). The macOS system Python 3.9 is too old for
+        // current FastAPI and security tools. Each build creates its own clean venv from it.
+        PYTHON = '/opt/anaconda3/bin/python3.13'
+        // SonarScanner CLI (includes its own Java runtime) for the Code Quality stage.
+        SCANNER_VERSION  = '7.3.0.5189'
+        SCANNER_PLATFORM = 'macosx-aarch64'
     }
 
     stages {
@@ -39,7 +45,7 @@ pipeline {
 
                 // Backend: isolated virtual environment with app + test dependencies.
                 sh '''
-                    python3 -m venv .venv
+                    ${PYTHON} -m venv --clear .venv
                     . .venv/bin/activate
                     python -m pip install -q --upgrade pip
                     python -m pip install -q -r backend/requirements-dev.txt
@@ -82,6 +88,36 @@ pipeline {
                 always {
                     // Publish results in Jenkins; any failed test marks the build as failed and stops the pipeline.
                     junit testResults: 'backend/reports/junit.xml, frontend/reports/junit.xml'
+                }
+            }
+        }
+
+        stage('Code Quality') {
+            steps {
+                // SonarCloud analyses bugs, code smells, duplication and test coverage.
+                // sonar.qualitygate.wait=true (sonar-project.properties) makes the scanner wait for the
+                // Quality Gate and return an error if it fails, which stops the pipeline here.
+                withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+                    sh '''
+                        SCANNER_DIR="sonar-scanner-${SCANNER_VERSION}-${SCANNER_PLATFORM}"
+                        if [ ! -x "$SCANNER_DIR/bin/sonar-scanner" ]; then
+                            curl -sSLo scanner.zip "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-${SCANNER_PLATFORM}.zip"
+                            unzip -q -o scanner.zip && rm -f scanner.zip
+                        fi
+                        "$SCANNER_DIR/bin/sonar-scanner" -Dsonar.token="$SONAR_TOKEN" -Dsonar.projectVersion="$VERSION"
+                    '''
+                }
+            }
+        }
+
+        stage('Security') {
+            steps {
+                // Bandit, pip-audit, npm audit and Trivy with a security gate (thresholds in ci/security_scan.sh).
+                sh 'bash ci/security_scan.sh'
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/security/**', allowEmptyArchive: true
                 }
             }
         }
