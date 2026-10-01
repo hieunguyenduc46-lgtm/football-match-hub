@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Backends of both environments, reached by their network alias on the fmh-monitoring network.
+  - job_name: fmh-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["fmh-production-backend:8000"]
+        labels:
+          environment: production
+      - targets: ["fmh-staging-backend:8000"]
+        labels:
+          environment: staging
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

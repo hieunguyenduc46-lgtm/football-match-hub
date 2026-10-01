@@ -1,0 +1,42 @@
+# Football Match Hub - application stack (infrastructure as code).
+# The SAME file is used for staging and production; the environment is chosen by the project
+# name (-p) and the env file, so both environments are built from identical definitions:
+#   docker compose -p fmh-staging --env-file deploy/staging.env -f deploy/docker-compose.yml up -d
+#   docker compose -p fmh-prod    --env-file deploy/prod.env    -f deploy/docker-compose.yml up -d
+# IMAGE_TAG (version-commit) is passed in by Jenkins, so each environment runs an exact build.
+
+services:
+  backend:
+    image: fmh-backend:${IMAGE_TAG:?IMAGE_TAG must be set}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV}
+      APP_VERSION: ${IMAGE_TAG}
+      USE_MOCK: ${USE_MOCK:-true}
+      # Production only: injected from Jenkins Credentials at release time, never stored in Git.
+      API_FOOTBALL_KEY: ${API_FOOTBALL_KEY:-}
+      # Port uvicorn listens on inside the container (changed only to simulate a bad release).
+      PORT: ${BACKEND_INTERNAL_PORT:-8000}
+    ports:
+      # Bound to localhost only: used by the pipeline's smoke tests.
+      - "127.0.0.1:${BACKEND_PORT}:8000"
+    networks:
+      default: {}
+      monitoring:
+        # Stable name Prometheus uses to scrape /metrics (e.g. fmh-production-backend).
+        aliases: ["fmh-${APP_ENV}-backend"]
+
+  frontend:
+    image: fmh-frontend:${IMAGE_TAG}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy   # wait for the backend HEALTHCHECK before serving traffic
+    ports:
+      - "${FRONTEND_PORT}:8080"
+
+networks:
+  # Shared with the monitoring stack (created by the pipeline: docker network create fmh-monitoring).
+  monitoring:
+    name: fmh-monitoring
+    external: true

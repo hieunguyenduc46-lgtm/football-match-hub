@@ -11,7 +11,10 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip/setuptools first: the versions in the base image bundle libraries with known CVEs
+# (urllib3, msgpack, setuptools flagged by Trivy in build #4).
+RUN pip install --no-cache-dir --upgrade pip setuptools \
+    && pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Least privilege: run as a non-root user so a compromised app cannot change the system.
@@ -21,7 +24,7 @@ USER appuser
 EXPOSE 8000
 
 # Docker marks the container "unhealthy" if /api/health stops answering.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/api/health' % os.environ.get('PORT', '8000'), timeout=4)" || exit 1
 
 # Host must be 0.0.0.0; the port comes from the PORT environment variable (default 8000).

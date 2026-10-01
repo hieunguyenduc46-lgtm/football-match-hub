@@ -18,6 +18,7 @@ import config
 from config import settings
 from cache import TTLCache
 import mock_data
+from metrics import CACHE, UPSTREAM
 
 cache = TTLCache(settings.cache_ttl_seconds)
 
@@ -72,13 +73,20 @@ async def _request(path: str, params: Optional[dict] = None, ttl: Optional[int] 
 
     cached = cache.get(cache_key)
     if cached is not None:
+        CACHE.labels("hit").inc()
         return cached
+    CACHE.labels("miss").inc()
 
     headers = HEADERS
-    async with httpx.AsyncClient(timeout=15) as http:
-        resp = await http.get(f"{BASE_URL}{path}", params=params, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=15) as http:
+            resp = await http.get(f"{BASE_URL}{path}", params=params, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        UPSTREAM.labels("error").inc()  # network error / timeout / HTTP 4xx-5xx from API-Football
+        raise
+    UPSTREAM.labels("error" if data.get("errors") else "ok").inc()
 
     # API-Football returns HTTP 200 with an `errors` field when rate-limited (e.g. too many requests
     # per minute) -> empty response. NEVER cache an error response, otherwise the empty data

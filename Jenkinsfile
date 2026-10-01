@@ -1,5 +1,5 @@
 // Football Match Hub - Jenkins CI/CD pipeline (SIT223/SIT753 Task 7.3HD)
-// Stages so far: Build -> Test -> Code Quality -> Security. Deploy, Release and Monitoring are added next.
+// Build -> Test -> Code Quality -> Security -> Deploy (staging) -> Release (production) -> Monitoring
 
 pipeline {
     agent any
@@ -14,6 +14,11 @@ pipeline {
     // GitHub webhooks cannot reach a laptop, so Jenkins checks the repo for new commits every 5 minutes.
     triggers {
         pollSCM('H/5 * * * *')
+    }
+
+    parameters {
+        booleanParam(name: 'SIMULATE_BAD_RELEASE', defaultValue: false,
+            description: 'Demo only: release with a broken configuration to show the automatic rollback.')
     }
 
     environment {
@@ -121,11 +126,58 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy') {
+            steps {
+                // STAGING environment (mock data) from deploy/docker-compose.yml + deploy/staging.env,
+                // running exactly the images built in this pipeline run (IMAGE_TAG).
+                sh '''
+                    docker network inspect fmh-monitoring > /dev/null 2>&1 || docker network create fmh-monitoring
+                    docker compose -p fmh-staging --env-file deploy/staging.env -f deploy/docker-compose.yml up -d --remove-orphans
+                    bash ci/smoke_test.sh http://localhost:8081 http://localhost:8001 "$IMAGE_TAG"
+                '''
+            }
+            post {
+                failure {
+                    sh 'docker compose -p fmh-staging --env-file deploy/staging.env -f deploy/docker-compose.yml logs --tail=50 || true'
+                }
+            }
+        }
+
+        stage('Release') {
+            steps {
+                // Manual approval gate: a person promotes the tested build to production.
+                timeout(time: 15, unit: 'MINUTES') {
+                    input message: "Staging passed. Release ${env.IMAGE_TAG} to PRODUCTION?", ok: 'Release'
+                }
+                // Production uses the real API key from Jenkins Credentials (masked in the log, never in Git).
+                // ci/release.sh smoke-tests production and rolls back automatically if it fails.
+                withCredentials([string(credentialsId: 'API_FOOTBALL_KEY', variable: 'API_FOOTBALL_KEY')]) {
+                    sh 'SIMULATE_BAD_RELEASE=${SIMULATE_BAD_RELEASE} bash ci/release.sh'
+                }
+                // Version the release in Git: tag v1.0.<build> on the released commit and push it to GitHub.
+                withCredentials([usernamePassword(credentialsId: 'github-token',
+                                                  usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+                    sh '''
+                        git -c user.name="Jenkins" -c user.email="jenkins@localhost" \
+                            tag -a "v${VERSION}" -m "Release v${VERSION} (images ${IMAGE_TAG})"
+                        git push "https://${GH_USER}:${GH_TOKEN}@github.com/hieunguyenduc46-lgtm/football-match-hub.git" "v${VERSION}"
+                    '''
+                }
+            }
+        }
+
+        stage('Monitoring') {
+            steps {
+                // Prometheus + Alertmanager + Grafana; the script checks production is scraped and alerts are loaded.
+                sh 'bash ci/monitoring.sh'
+            }
+        }
     }
 
     post {
         success {
-            echo "Pipeline succeeded for ${env.IMAGE_TAG}"
+            echo "Released ${env.IMAGE_TAG}: production http://localhost:8088 | staging http://localhost:8081 | Grafana http://localhost:3000"
         }
         failure {
             echo 'Pipeline failed - check the stage that is marked red.'

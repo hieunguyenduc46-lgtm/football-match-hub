@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Enable the /_debug/* endpoints (show raw API output). DISABLED by default in production so
     # internal data is not exposed and no quota is wasted. Set DEBUG=true locally when debugging.
     debug: bool = False
+    # Set by the deployment (docker compose): build version and environment name.
+    app_version: str = "dev"
+    app_env: str = "local"
 
     model_config = SettingsConfigDict(
         env_file=".env",
