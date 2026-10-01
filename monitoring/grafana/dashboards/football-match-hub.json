@@ -7,7 +7,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "time": {
     "from": "now-30m",
@@ -161,7 +161,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_requests_total{environment=\"production\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total{environment=\"production\"}[5m])), 0.001)",
+          "expr": "(sum(rate(http_requests_total{environment=\"production\",status=~\"5..\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_requests_total{environment=\"production\"}[5m])), 0.001)",
           "legendFormat": ""
         }
       ],
@@ -217,7 +217,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(cache_lookups_total{environment=\"production\",result=\"hit\"}[15m])) / clamp_min(sum(rate(cache_lookups_total{environment=\"production\"}[15m])), 0.001)",
+          "expr": "(sum(rate(cache_lookups_total{environment=\"production\",result=\"hit\"}[15m])) or vector(0)) / clamp_min(sum(rate(cache_lookups_total{environment=\"production\"}[15m])), 0.001)",
           "legendFormat": ""
         }
       ],
