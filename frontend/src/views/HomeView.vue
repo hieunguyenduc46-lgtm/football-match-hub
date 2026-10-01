@@ -218,17 +218,19 @@ onUnmounted(stopPolling)
 
   <!-- League filter -->
   <div class="filter-row">
-    <label class="muted" style="font-size:13px">{{ $t('league') }}</label>
-    <select v-model="selectedLeague" class="league-select">
+    <label for="league-filter" class="muted" style="font-size:13px">{{ $t('league') }}</label>
+    <select id="league-filter" v-model="selectedLeague" class="league-select">
       <option value="">{{ $t('all') }}</option>
       <option v-for="l in leagues" :key="l.id" :value="l.id">{{ leagueName(l.name, l.id) }}</option>
     </select>
     <!-- Computer: NATIVE date input so the date can be typed (lang -> correct VI/EN format) -->
-    <input v-if="!isTouch" type="date" v-model="selectedDate" class="league-select" :lang="dateLang" />
+    <label v-if="!isTouch" for="date-filter" class="sr-only">{{ dateLabel }}</label>
+    <input v-if="!isTouch" id="date-filter" type="date" v-model="selectedDate" class="league-select" :lang="dateLang" />
     <!-- Phone/touch: self-formatted VI/EN label, with a transparent native input on top to open the calendar -->
     <span v-else class="league-select date-pick" @click="openDatePicker">
       <span class="date-pick-text">{{ dateLabel }}</span>
-      <input ref="dateInput" type="date" v-model="selectedDate" class="date-pick-native" :aria-label="dateLabel" />
+      <label for="date-filter-touch" class="sr-only">{{ dateLabel }}</label>
+      <input id="date-filter-touch" ref="dateInput" type="date" v-model="selectedDate" class="date-pick-native" :aria-label="dateLabel" />
     </span>
   </div>
 

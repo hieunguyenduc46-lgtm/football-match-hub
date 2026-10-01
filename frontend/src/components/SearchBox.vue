@@ -123,7 +123,9 @@ onBeforeUnmount(() => { document.removeEventListener('click', onClickOutside); c
 
 <template>
   <div class="sbox" ref="boxRef">
+    <label for="home-search" class="sr-only">{{ placeholder }}</label>
     <input
+      id="home-search"
       class="search sbox-input"
       :placeholder="placeholder"
       v-model="q"

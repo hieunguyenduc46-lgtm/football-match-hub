@@ -1,164 +1,131 @@
 # Football Match Hub
 
-Web xem kết quả, lịch thi đấu, bảng xếp hạng, thông tin đội & cầu thủ (kèm ảnh) bóng đá.
+A football (soccer) web app with live scores, fixtures, league tables, team and player profiles,
+player comparison and head-to-head search, in English and Vietnamese.
+It is delivered through a **7-stage Jenkins CI/CD pipeline** (SIT223/SIT753 Task 7.3HD).
 
-**Stack:** Vue 3 + Vite (frontend) · FastAPI (backend) · API-Football (dữ liệu).
+| Layer | Technology |
+|---|---|
+| Frontend | Vue 3, Vite, Pinia, Vue Router (PWA) served by nginx |
+| Backend | Python FastAPI: proxy + tiered cache in front of [API-Football](https://www.api-football.com/), rate limiting (slowapi), Prometheus metrics |
+| Data | API-Football (production) or built-in mock data (tests, CI, staging) |
+| CI/CD | Jenkins (declarative `Jenkinsfile`), Docker, Docker Compose |
+| Quality & security | pytest, Vitest, SonarCloud, Bandit, pip-audit, npm audit, Trivy |
+| Monitoring | Prometheus, Alertmanager, Grafana |
 
-> Backend đứng giữa giấu API key + cache lại để tiết kiệm quota. Frontend không bao giờ
-> chạm trực tiếp vào API-Football.
+The backend sits between the browser and API-Football, so the **API key never reaches the frontend**,
+and a shared cache keeps the number of paid API calls low.
 
----
+## Architecture
 
-## Cấu trúc thư mục
-
-```
-Football Match Hub/
-├── backend/                 # FastAPI – proxy + cache API-Football
-│   ├── main.py              # khởi tạo app, CORS, gắn router
-│   ├── config.py            # đọc .env (API key, mock, TTL...)
-│   ├── cache.py             # cache TTL trong bộ nhớ
-│   ├── api_football.py      # client gọi API (có nhánh mock)
-│   ├── mock_data.py         # dữ liệu mẫu đúng shape API thật
-│   ├── routers/             # fixtures, standings, teams, players
-│   └── requirements.txt
-└── frontend/                # Vue 3 + Vite
-    └── src/
-        ├── views/           # Home, MatchDetail, Team, Player, League
-        ├── components/      # MatchCard, TheHeader
-        ├── stores/          # Pinia (fixtures)
-        ├── services/api.js  # axios -> /api (proxy sang backend)
-        └── router/
+```mermaid
+flowchart LR
+    U[Browser] --> N[nginx<br/>frontend container]
+    N -- /api/* --> B[FastAPI backend<br/>container]
+    B -- cached --> A[(API-Football)]
+    P[Prometheus] -- scrape /metrics --> B
+    P --> AM[Alertmanager] --> R[alert receiver]
+    G[Grafana] --> P
 ```
 
----
+## CI/CD pipeline
 
-## Chạy thử (chỉ 4 bước)
+`Jenkinsfile` defines 7 stages. Every stage has a **gate**: if it fails, the pipeline stops and nothing reaches production.
 
-Cần: **Python 3.10+** và **Node 18+**.
+| # | Stage | What happens | Gate |
+|---|---|---|---|
+| 1 | **Build** | Python venv + dependencies, `npm ci`, Vite production build, Docker images `fmh-backend` and `fmh-frontend` tagged `1.0.<build>-<commit>` | Any build error |
+| 2 | **Test** | 75 backend tests (pytest: unit, integration, security, smoke) and 28 frontend tests (Vitest); JUnit + coverage reports published in Jenkins | Any failing test |
+| 3 | **Code Quality** | SonarCloud analysis (bugs, code smells, duplication, coverage) | SonarCloud Quality Gate |
+| 4 | **Security** | Bandit (Python SAST), pip-audit and npm audit (dependencies), Trivy (Docker images and Dockerfiles); reports archived | See thresholds below |
+| 5 | **Deploy** | Staging environment with Docker Compose (`deploy/`), mock data | Smoke test: health, version, frontend, API proxy |
+| 6 | **Release** | Manual approval, production with the real API key from Jenkins Credentials, Git tag `v1.0.<build>` pushed to GitHub | Smoke test, **automatic rollback** to the previous version on failure |
+| 7 | **Monitoring** | Prometheus + Alertmanager + Grafana (`monitoring/`) | Production must be scraped and all alert rules loaded |
 
-### 1. Backend
+**Security gate thresholds** (`ci/security_scan.sh`):
+
+| Tool | Fails the build on |
+|---|---|
+| Bandit | MEDIUM or HIGH severity issue |
+| pip-audit | any known vulnerability |
+| npm audit | HIGH or CRITICAL in production dependencies |
+| Trivy image | CRITICAL vulnerability with a fix available |
+| Trivy config | HIGH or CRITICAL Dockerfile misconfiguration |
+
+## Environments
+
+| Environment | URL | Data | Started by |
+|---|---|---|---|
+| Staging | http://localhost:8081 | mock | Deploy stage |
+| Production | http://localhost:8088 | API-Football | Release stage |
+| Grafana | http://localhost:3000 | dashboard | Monitoring stage |
+| Prometheus | http://localhost:9090 | metrics, alert rules | Monitoring stage |
+| Alertmanager | http://localhost:9093 | alert routing | Monitoring stage |
+
+Staging and production use the **same** `deploy/docker-compose.yml`; only the env file differs
+(`deploy/staging.env`, `deploy/prod.env`).
+
+## Monitoring and alerts
+
+The backend exposes `/metrics` (request count and latency per route, API-Football calls, cache hits).
+Alert rules (`monitoring/prometheus/alerts.yml`):
+
+| Alert | Condition |
+|---|---|
+| BackendDown | backend not reachable for 30 s |
+| HighErrorRate | more than 5% of requests return 5xx for 1 min |
+| HighLatencyP95 | p95 latency above 2 s for 5 min |
+| UpstreamApiErrors | more than 5 failed API-Football calls in 5 min |
+
+Notifications are sent by Alertmanager to a webhook receiver: `docker logs -f fmh-monitoring-alert-receiver-1`.
+
+**Incident simulation:** `docker stop fmh-prod-backend-1`. After about 30 s `BackendDown` fires in
+Prometheus, Grafana shows the backend as DOWN and the receiver logs the notification.
+`docker start fmh-prod-backend-1` resolves it.
+
+**Rollback demo:** run the job with the parameter `SIMULATE_BAD_RELEASE = true`. The release deploys a broken
+configuration, the production smoke test fails and `ci/release.sh` restores the previous version.
+
+## Running the pipeline
+
+Requirements on the Jenkins machine: Docker Desktop, Python 3.10+, Node.js 20.19+, Git.
+
+Jenkins credentials:
+
+| ID | Type | Used for |
+|---|---|---|
+| `SONAR_TOKEN` | Secret text | SonarCloud analysis |
+| `API_FOOTBALL_KEY` | Secret text | Production API key |
+| `github-token` | Username + personal access token | Pushing release tags |
+
+Create a Pipeline job with *Pipeline script from SCM* pointing to this repository (`Jenkinsfile` on `main`).
+
+## Running locally
 
 ```bash
+# Backend (http://localhost:8000, docs at /docs)
 cd backend
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env             # để trống API key -> tự chạy MOCK
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env          # leave API_FOOTBALL_KEY empty to use mock data
 uvicorn main:app --reload
-```
+python -m pytest              # run the tests
 
-Backend chạy ở `http://localhost:8000` · Docs tự sinh: `http://localhost:8000/docs`
-
-### 2. Frontend (mở terminal khác)
-
-```bash
+# Frontend (http://localhost:5173, /api is proxied to the backend)
 cd frontend
 npm install
 npm run dev
+npm test
 ```
 
-Mở `http://localhost:5173`. Vite tự proxy `/api/*` sang backend nên không lo CORS.
+## Repository structure
 
----
-
-## Bật dữ liệu THẬT (bỏ mock)
-
-1. Đăng ký tại https://www.api-football.com/ → lấy **API key**.
-2. Mở `backend/.env`:
-   ```
-   API_FOOTBALL_KEY=key_cua_ban
-   USE_MOCK=false
-   ```
-3. Restart backend. Xong — frontend không cần sửa gì (mock và API thật cùng shape).
-
-> Free tier = **100 request/ngày**. Cache (mặc định 5 phút) giúp không vượt nhanh.
-> Nếu đăng ký qua RapidAPI, header sẽ khác (`x-rapidapi-key`) — báo mình để chỉnh `api_football.py`.
-
----
-
-## Đã làm xong — Phase 1 ✅
-
-- Backend proxy + cache + chế độ mock.
-- Trang chủ "match center": tabs **Live / Hôm nay / Sắp đá / Kết quả**, gom theo giải.
-- Trang chi tiết trận (tỉ số, sân, trọng tài).
-- Trang đội + đội hình.
-- **Trang cầu thủ có ảnh mặt + thống kê** (bàn thắng, kiến tạo, số trận, phút, thẻ, rating).
-- Bảng xếp hạng.
-- Giao diện dark, mobile-first.
-
-## Đã làm xong — Phase 2 ✅
-
-- **Line-up vẽ trên sân:** sơ đồ thực tế (4-3-3, 4-2-3-1...), đặt cầu thủ theo vị trí `grid`,
-  có ảnh + số áo + tên, ghế dự bị, HLV. Bấm cầu thủ → trang cá nhân.
-- **Timeline diễn biến:** bàn thắng / thẻ vàng-đỏ / thay người theo phút, chia 2 bên đội.
-- **Top scorers** (vua phá lưới) trong trang giải đấu (tab riêng).
-- Trang chi tiết trận có tab **Đội hình / Diễn biến**.
-
-> **Dữ liệu mẫu hiện có:** 4 giải — **World Cup 2026**, Premier League, La Liga, **Saudi Pro
-> League**. 18 đội (CLB + đội tuyển QG) có trang + squad; 45 cầu thủ có trang chi tiết + ảnh +
-> thống kê (bấm "Theo dõi" được), gồm Ronaldo, Messi, Neymar, Benzema, Mbappé, Haaland, Salah…
-> Line-up + diễn biến đầy đủ cho 4 trận live: **MU–Liverpool**, **Real–Barca**,
-> **Argentina–France** (WC), **Al-Nassr–Al-Hilal** (Saudi). Bảng xếp hạng + vua phá lưới cho cả
-> 4 giải. Mọi thứ sẽ tự đầy đủ khi cắm API thật.
-
-## Đã làm xong — Phase 3 ✅
-
-- **Thanh chọn ngày** ở trang chủ (lướt trận theo từng ngày, kiểu match-center) — đã gọi
-  fixtures theo `?date=`, sẵn sàng cho API thật.
-- **Lọc theo giải đấu** (dropdown) — đã thêm trận La Liga (Real – Barca) để thấy bộ lọc hoạt động.
-- **Ô tìm kiếm hoạt động:** gõ tên đội/cầu thủ → dropdown gợi ý → bấm mở trang.
-- **Nút Dark / Light** ở header, ghi nhớ lựa chọn (localStorage).
-- Endpoint mới: `/api/search`, `/api/leagues`.
-
-## Đã làm xong — Phase 4 ✅
-
-- **Theo dõi đội & cầu thủ:** nút ☆/★ ở trang đội và cầu thủ, lưu bằng localStorage.
-- **Trang "Đang theo dõi"** (icon ♥ ở header) liệt kê đội + cầu thủ đã theo dõi, bấm vào để xem.
-
-> Hiện lưu trên máy (localStorage). Phase 4.5 (tùy chọn) sẽ nâng lên **Supabase** để có
-> tài khoản thật + đồng bộ nhiều thiết bị, giữ nguyên cách dùng store hiện tại.
-
-## Đã làm xong — Phase 5 & 6 (chuẩn bị) ✅
-
-- **Auto-refresh live:** trang chủ tự làm mới ngầm mỗi 30s; trang trận tự cập nhật tỉ số +
-  sự kiện mỗi 20s khi trận đang đá (không nhấp nháy skeleton).
-- **PWA:** có `manifest`, icon, service worker (chỉ bật ở bản production) → cài được như app,
-  mở offline được phần khung.
-- **Sẵn sàng deploy:** frontend dùng `VITE_API_BASE`; backend CORS nhiều origin qua env;
-  có sẵn `render.yaml`, `Dockerfile`, `vercel.json`, `_redirects`.
-- **Sẵn sàng API thật:** chọn nguồn key `direct`/`rapidapi`, mùa giải qua `SEASON`.
-
-## Deploy lên mạng (có link chia sẻ)
-
-**Backend → Render:** New + → Blueprint → chọn repo (Render đọc `render.yaml`). Sau khi có URL
-backend, vào Environment đặt `FRONTEND_ORIGIN` = URL frontend (bước dưới).
-
-**Frontend → Vercel:** Import repo → Root Directory = `frontend` → Framework: Vite. Thêm biến
-`VITE_API_BASE = https://<backend>.onrender.com/api`. Deploy. Dán URL frontend ngược lại vào
-`FRONTEND_ORIGIN` của backend.
-
-## Đã làm xong — Phase 7 (tính năng nâng cao) ✅
-
-- **Trang trận giờ có 5 tab:** Đội hình · Diễn biến · **Thống kê** (kiểm soát bóng, dứt điểm,
-  xG… dạng thanh so sánh) · **Chấm điểm** cầu thủ sau trận (có gắn **MOTM**) · **Đối đầu (H2H)**
-  (5 trận gần nhất + tổng kết Thắng-Hòa-Thua). Các tab nặng được **lazy-load** để tiết kiệm request.
-- **Trang đội:** thêm **phong độ W-D-L 5 trận** (badge màu) + **danh sách trận gần đây**.
-- **So sánh 2 cầu thủ** (icon ⇄ ở header): gõ tên 2 cầu thủ → so kè bàn thắng/kiến tạo/số trận/phút/rating.
-- **Bảng xếp hạng** tô màu **vùng dự cúp** (xanh) và **rớt hạng** (đỏ); Premier League mở rộng lên 10 đội.
-
-## Đã làm xong — Phase 8 (mở rộng dữ liệu + đa ngôn ngữ) ✅
-
-- **World Cup đầy đủ 8 bảng A–H (32 đội tuyển)** — trang giải render từng bảng riêng.
-- **Premier League & La Liga đủ 20 CLB** mỗi giải (BXH + trang đội). Tổng **~76 đội** đều có trang.
-- **Chuyển ngôn ngữ Anh ⇄ Việt** (nút VI/EN ở header), nhớ lựa chọn; toàn bộ nhãn giao diện +
-  ngày tháng đổi theo ngôn ngữ.
-
-> **Về "full cầu thủ mọi CLB":** không nhập tay (hàng nghìn người, sẽ thành dữ liệu giả). Mock
-> giữ ngôi sao tiêu biểu; **roster đầy đủ từng đội sẽ tự có khi cắm API thật** (xem docs/CONNECT_API.md).
-
-## Roadmap còn lại
-
-- **Phase 4.5 (tùy chọn):** Supabase auth + đồng bộ favorites — xem [docs/SUPABASE.md](docs/SUPABASE.md).
-- **Bất cứ lúc nào:** cắm **API thật** — hướng dẫn đầy đủ ở [docs/CONNECT_API.md](docs/CONNECT_API.md)
-  (lấy key, chọn mùa giải, quota, lỗi thường gặp). Trang chủ đã gọi theo ngày nên không bị trống.
-- Notification trước giờ bóng lăn; timezone cho người dùng chọn; thêm nhiều giải vào mock.
+```
+backend/      FastAPI app, tests/, Dockerfile
+frontend/     Vue 3 app, tests/, Dockerfile, nginx.conf
+deploy/       Docker Compose stack + staging/production settings
+monitoring/   Prometheus, Alertmanager, Grafana configuration
+ci/           Pipeline scripts: security scan, smoke test, release with rollback, monitoring check
+Jenkinsfile   The 7-stage pipeline
+sonar-project.properties
+```

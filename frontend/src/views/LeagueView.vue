@@ -284,8 +284,8 @@ function goPlayer(id) {
 
   <!-- Choose season / edition -->
   <div v-if="seasons.length" class="filter-row" style="margin-top:10px">
-    <label class="muted" style="font-size:13px">{{ $t('seasonLabel') }}</label>
-    <select class="league-select" :value="season" @change="changeSeason($event.target.value)">
+    <label for="season-select" class="muted" style="font-size:13px">{{ $t('seasonLabel') }}</label>
+    <select id="season-select" class="league-select" :value="season" @change="changeSeason($event.target.value)">
       <option v-for="s in seasons" :key="s.year" :value="s.year">{{ seasonLabel(s.year) }}</option>
     </select>
   </div>

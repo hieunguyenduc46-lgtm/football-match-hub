@@ -76,7 +76,8 @@ function winB(r) {
         <button class="link" @click="pa = null">{{ $t('change') }}</button>
       </div>
       <div v-else class="cmp-search">
-        <input class="search" v-model="qa" @input="onType('a')" :placeholder="$t('playerA')" />
+        <label for="compare-player-a" class="sr-only">{{ $t('playerA') }}</label>
+        <input id="compare-player-a" class="search" v-model="qa" @input="onType('a')" :placeholder="$t('playerA')" />
         <div v-if="resa.length" class="search-dd">
           <div v-for="p in resa" :key="p.id" class="dd-item" @click="pick('a', p.id)">
             <img loading="lazy" :src="p.photo" @error="imgFallback" class="round" /> {{ p.name }}
@@ -92,7 +93,8 @@ function winB(r) {
         <button class="link" @click="pb = null">{{ $t('change') }}</button>
       </div>
       <div v-else class="cmp-search">
-        <input class="search" v-model="qb" @input="onType('b')" :placeholder="$t('playerB')" />
+        <label for="compare-player-b" class="sr-only">{{ $t('playerB') }}</label>
+        <input id="compare-player-b" class="search" v-model="qb" @input="onType('b')" :placeholder="$t('playerB')" />
         <div v-if="resb.length" class="search-dd">
           <div v-for="p in resb" :key="p.id" class="dd-item" @click="pick('b', p.id)">
             <img loading="lazy" :src="p.photo" @error="imgFallback" class="round" /> {{ p.name }}

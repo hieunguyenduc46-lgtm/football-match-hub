@@ -119,7 +119,9 @@ function toggleTheme() {
       <router-link to="/" class="logo">Football <span>Match Hub</span></router-link>
 
       <div class="search-wrap">
+        <label for="header-search" class="sr-only">{{ $t('search_ph') }}</label>
         <input
+          id="header-search"
           class="search"
           type="search"
           v-model="q"

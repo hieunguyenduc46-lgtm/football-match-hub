@@ -33,8 +33,9 @@ bandit -q -r backend -x backend/tests -f json -o "$REPORTS/bandit.json" || true
 bandit -q -r backend -x backend/tests --severity-level medium || FAILED="$FAILED Bandit"
 
 echo "==================== 2/5 pip-audit: Python dependencies ================"
-pip-audit -r backend/requirements.txt -f json -o "$REPORTS/pip-audit.json" || true
-pip-audit -r backend/requirements.txt || FAILED="$FAILED pip-audit"
+# The lock file lists every package that goes into the image (including indirect dependencies).
+pip-audit -r backend/requirements.lock --no-deps --disable-pip -f json -o "$REPORTS/pip-audit.json" || true
+pip-audit -r backend/requirements.lock --no-deps --disable-pip || FAILED="$FAILED pip-audit"
 
 echo "==================== 3/5 npm audit: JavaScript dependencies ============="
 (cd frontend && npm audit --json > "../$REPORTS/npm-audit.json") || true

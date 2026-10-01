@@ -10,12 +10,19 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt .
-# Upgrade pip/setuptools first: the versions in the base image bundle libraries with known CVEs
-# (urllib3, msgpack, setuptools flagged by Trivy in build #4).
-RUN pip install --no-cache-dir --upgrade pip setuptools \
-    && pip install --no-cache-dir -r requirements.txt
-COPY . .
+
+# Supply-chain hardening (SonarCloud docker:S8541 / S8544):
+#  - requirements.lock pins EVERY package (including dependencies) with SHA-256 hashes,
+#  - --only-binary :all: installs pre-built wheels only, so no setup.py scripts are executed.
+# pip is then removed: the running container does not need a package manager
+# (this also removes pip's bundled libraries that Trivy reported in build #4).
+COPY requirements.lock .
+RUN pip install --no-cache-dir --only-binary :all: --require-hashes -r requirements.lock \
+    && python -m pip uninstall -y pip
+
+# Copy only the application code (not the whole folder) - SonarCloud docker:S6470.
+COPY *.py ./
+COPY routers/ ./routers/
 
 # Least privilege: run as a non-root user so a compromised app cannot change the system.
 RUN useradd --create-home --uid 10001 appuser
