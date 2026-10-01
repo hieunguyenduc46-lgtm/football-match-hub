@@ -14,11 +14,11 @@ import { useFavoritesStore } from '../stores/favorites'
 
 const favs = useFavoritesStore()
 
-// Các giải CÓ vòng loại trực tiếp -> hiện tab "Nhánh đấu". Dùng danh sách curated để KHÔNG
-// gọi API nặng (lấy cả mùa) cho VĐQG thường vốn không có nhánh đấu.
+// Leagues WITH knockout rounds -> show the "Bracket" tab. Uses a curated list so we do NOT
+// make a heavy API call (whole season) for regular leagues that have no bracket.
 const BRACKET_LEAGUES = new Set([
   1, 2, 3, 848, 4, 9, 15, 5, 13, 11, 16, 6, 7, 17,   // C1/C2/C3, World Cup, Euro, Copa America, Club WC, Nations, Libertadores...
-  45, 143, 137, 81, 66, 48,                          // cúp QG: FA Cup, Copa del Rey, Coppa Italia, DFB Pokal, Coupe de France, EFL Cup
+  45, 143, 137, 81, 66, 48,                          // domestic cups: FA Cup, Copa del Rey, Coppa Italia, DFB Pokal, Coupe de France, EFL Cup
 ])
 
 const route = useRoute()
@@ -28,7 +28,7 @@ const scorers = ref([])
 const loading = ref(true)
 const tab = ref('standings') // 'standings' | 'scorers' | 'fixtures'
 
-// Lịch đấu (tab 'fixtures') — tải LƯỜI: chỉ gọi API khi người dùng mở tab này.
+// Fixtures ('fixtures' tab) — LAZY loaded: only calls the API when the user opens this tab.
 const fixtures = ref({ recent: [], upcoming: [] })
 const fxLoading = ref(false)
 let fxLoadedId = null
@@ -48,10 +48,10 @@ async function loadFixtures(id, yr) {
 const hasFixtures = computed(() => fixtures.value.recent.length || fixtures.value.upcoming.length)
 watch(tab, (v) => { if (v === 'fixtures') loadFixtures(route.params.id, season.value) })
 
-// ===== Chọn MÙA / KỲ (WC 2022 vs 2026, C1 24/25 vs 25/26...) =====
-const seasons = ref([])      // [{year, current}] để đổ vào dropdown
-const season = ref(null)     // mùa đang chọn; null = để backend tự chọn mặc định
-// Giải đấu ĐTQG / theo năm dương lịch -> nhãn 1 năm ("2022"); còn lại nhãn vắt mùa ("2025/26").
+// ===== Choose SEASON / EDITION (WC 2022 vs 2026, UCL 24/25 vs 25/26...) =====
+const seasons = ref([])      // [{year, current}] to fill the dropdown
+const season = ref(null)     // selected season; null = let the backend pick the default
+// National-team / calendar-year competitions -> single-year label ("2022"); others get a split-season label ("2025/26").
 const SINGLE_YEAR = new Set([1, 4, 9, 5, 6, 7, 10, 15, 253, 22, 21])
 function seasonLabel(yr) {
   if (SINGLE_YEAR.has(Number(route.params.id))) return String(yr)
@@ -63,7 +63,7 @@ function seasonParams(id) {
   return p
 }
 
-// Nhánh đấu (tab 'bracket') — chỉ với giải có knockout; tải LƯỜI khi mở tab.
+// Bracket ('bracket' tab) — only for leagues with knockouts; LAZY loaded when the tab opens.
 const showBracketTab = computed(() => BRACKET_LEAGUES.has(Number(route.params.id)))
 const bracket = ref([])
 const brLoading = ref(false)
@@ -83,8 +83,8 @@ async function loadBracket(id, yr) {
 }
 watch(tab, (v) => { if (v === 'bracket') loadBracket(route.params.id, season.value) })
 
-// ===== Bảng xếp hạng cá nhân khác: Kiến tạo / Thẻ vàng / Thẻ đỏ =====
-// Tải LƯỜI giống tab Lịch đấu/Nhánh đấu: chỉ gọi API khi người dùng mở tab đó.
+// ===== Other player leaderboards: Assists / Yellow cards / Red cards =====
+// LAZY loaded like the Fixtures/Bracket tabs: only calls the API when the user opens that tab.
 const BOARD_EP = { assists: '/topassists', ycards: '/topyellowcards', rcards: '/topredcards' }
 const boards = ref({ assists: [], ycards: [], rcards: [] })
 const boardLoading = ref(false)
@@ -106,7 +106,7 @@ async function loadBoard(kind) {
 function resetBoards() { boardKey.assists = boardKey.ycards = boardKey.rcards = null; boards.value = { assists: [], ycards: [], rcards: [] } }
 watch(tab, (v) => { if (v in BOARD_EP) loadBoard(v) })
 
-// Danh sách + chỉ số đang hiển thị theo tab (gộp chung khối render với vua phá lưới).
+// List + stat shown for the current tab (shares the render block with top scorers).
 const activeBoard = computed(() => (tab.value in BOARD_EP ? boards.value[tab.value] : scorers.value))
 function mainStat(s) {
   const st = s.statistics?.[0] || {}
@@ -123,9 +123,9 @@ function subStat(s) {
   return `${st.goals?.assists ?? 0} ${t('assistsShort')}`
 }
 
-// standings = mảng các "bảng" (giải thường: 1 bảng; World Cup: 8 bảng A–H).
-// KHỬ TRÙNG LẶP đội trong mỗi bảng theo id: API đôi khi trả mỗi đội 2 lần (vd World Cup
-// 2026 -> 8 dòng/4 đội). Giữ dòng ĐẦU mỗi đội để bảng không bị lặp.
+// standings = array of "groups" (regular league: 1 table; World Cup: 8 groups A–H).
+// DE-DUPLICATE teams in each group by id: the API sometimes returns each team twice (e.g. World Cup
+// 2026 -> 8 rows/4 teams). Keep the FIRST row per team so the table isn't duplicated.
 const groups = computed(() => {
   const raws = raw.value?.league?.standings || []
   return raws.map((g) => {
@@ -141,28 +141,28 @@ const groups = computed(() => {
 })
 const leagueName = computed(() => translateLeague(raw.value?.league?.name, raw.value?.league?.id ?? route.params.id) || t('league_default'))
 
-// Dữ liệu để FOLLOW giải (lưu id + tên gốc + logo). Logo lấy từ standings, thiếu thì dựng theo id.
+// Data for FOLLOWING the league (stores id + original name + logo). Logo comes from standings, else built from the id.
 const leagueItem = computed(() => ({
   id: Number(route.params.id),
   name: raw.value?.league?.name || leagueName.value,
   logo: raw.value?.league?.logo || `https://media.api-sports.io/football/leagues/${route.params.id}.png`,
 }))
 
-// Tô màu vùng theo ĐÚNG 'description' mà API trả về cho từng hàng.
-// Số suất dự cúp châu Âu khác nhau mỗi giải & mỗi mùa (vd PL 2025/26 có 5 suất C1),
-// nên KHÔNG hardcode "top 4" nữa — đọc thẳng mô tả thật để khớp với Google.
+// Colour zones using EXACTLY the 'description' the API returns for each row.
+// The number of European spots differs per league & per season (e.g. PL 2025/26 has 5 UCL spots),
+// so do NOT hard-code "top 4" any more — read the real description so it matches Google.
 function zoneByDesc(desc) {
   const d = (desc || '').toLowerCase()
   if (d.includes('relegation')) return 'zone-rel'
   if (d.includes('champions league')) return 'zone-cl'
   if (d.includes('europa league')) return 'zone-el'
   if (d.includes('conference')) return 'zone-conf'
-  return '' // play-off / vòng loại khác -> không tô
+  return '' // play-off / other qualifiers -> no colour
 }
 
-// Chỉ tô vùng C1/C2/C3/rớt hạng cho 5 giải VĐQG lớn châu Âu — nơi các nhãn này ĐÚNG.
-// Giải khác (V-League, cúp, AFC...) description hay là "Champions League 2"... -> nếu map sẽ
-// ra nhãn châu Âu sai/buồn cười, nên KHÔNG tô vùng cho chúng (hiện BXH thường, sạch).
+// Only colour UCL/UEL/UECL/relegation zones for Europe's top 5 leagues — where these labels are CORRECT.
+// Other leagues (V-League, cups, AFC...) often have descriptions like "Champions League 2"... -> mapping them would
+// give wrong/silly European labels, so do NOT colour zones for them (show a plain, clean table).
 const ZONE_LEAGUES = new Set([39, 140, 135, 78, 61])
 
 function zone(row, g) {
@@ -170,7 +170,7 @@ function zone(row, g) {
   return zoneByDesc(row.description)
 }
 
-// Chú thích động: chỉ hiện những vùng thực sự có trong bảng.
+// Dynamic legend: only show zones that actually appear in the table.
 const legendZones = computed(() => {
   const set = new Set()
   for (const g of groups.value) for (const r of g) { const z = zone(r, g); if (z) set.add(z) }
@@ -185,17 +185,17 @@ const legendZones = computed(() => {
 
 let loadSeq = 0
 
-// Tải BXH + vua phá lưới theo mùa đang chọn (season.value). Tách riêng để đổi mùa gọi lại được.
+// Load standings + top scorers for the selected season (season.value). Kept separate so changing season can call it again.
 async function loadStandingsScorers(id, seq) {
   try {
     const [sRes, tsRes] = await Promise.all([
       api.get('/standings', { params: seasonParams(id) }),
       api.get('/topscorers', { params: seasonParams(id) }),
     ])
-    if (seq !== loadSeq) return                   // đã chuyển sang giải/mùa khác
+    if (seq !== loadSeq) return                   // already switched to another league/season
     raw.value = sRes.data.response?.[0] || null
     scorers.value = tsRes.data.response || []
-    // Chưa chọn mùa -> lấy mùa mặc định backend trả về để hiện trong dropdown.
+    // No season chosen yet -> use the backend's default season to show in the dropdown.
     if (!season.value && raw.value?.league?.season) season.value = raw.value.league.season
     setTitle(leagueName.value)
   } finally {
@@ -213,7 +213,7 @@ async function loadLeague(id) {
   brLoadedId = null
   bracket.value = []
   resetBoards()
-  // Mùa khởi tạo: lấy từ URL (?season=...) khi đi từ 1 trận sang; nếu không -> để backend mặc định.
+  // Initial season: from the URL (?season=...) when coming from a match; otherwise use the backend default.
   season.value = Number(route.query.season) || null
   seasons.value = []
   api.get(`/leagues/${id}/seasons`).then(({ data }) => { if (seq === loadSeq) seasons.value = data.response || [] }).catch(() => {})
@@ -223,7 +223,7 @@ async function loadLeague(id) {
   await loadStandingsScorers(id, seq)
 }
 
-// Đổi mùa từ dropdown -> tải lại BXH/vua phá lưới/lịch đấu/nhánh đấu theo mùa mới.
+// Changing season in the dropdown -> reload standings/top scorers/fixtures/bracket for the new season.
 function changeSeason(yr) {
   const id = route.params.id
   season.value = Number(yr) || null
@@ -242,15 +242,15 @@ function changeSeason(yr) {
   if (tab.value in BOARD_EP) loadBoard(tab.value)
 }
 
-// keep-alive: component bị cache, KHÔNG remount. Chỉ tải lại khi đây đúng là trang đang
-// xem (route.name === 'league') VÀ là giải khác giải đã tải -> tránh tải nhầm khi bị cache,
-// và tránh tải lại (mất vị trí cuộn) khi back về đúng giải cũ.
+// keep-alive: the component is cached, NOT remounted. Only reload when this really is the page being
+// viewed (route.name === 'league') AND it's a different league from the one loaded -> avoids loading by mistake while cached,
+// and avoids reloading (losing scroll position) when going back to the same league.
 let loadedKey = null
 function syncLeague() {
   if (route.name !== 'league') return
   const id = route.params.id
   if (!id) return
-  // Khoá theo id + mùa ở URL: đổi giải HOẶC đổi ?season (đi từ trận khác mùa) -> tải lại.
+  // Keyed on id + season in the URL: change league OR change ?season (coming from a match in another season) -> reload.
   const key = `${id}:${route.query.season || ''}`
   if (key === loadedKey) return
   loadedKey = key
@@ -282,7 +282,7 @@ function goPlayer(id) {
     <button class="tab" :class="{ active: tab === 'rcards' }" @click="tab = 'rcards'">{{ $t('tab_rcards') }}</button>
   </div>
 
-  <!-- Chọn mùa / kỳ -->
+  <!-- Choose season / edition -->
   <div v-if="seasons.length" class="filter-row" style="margin-top:10px">
     <label class="muted" style="font-size:13px">{{ $t('seasonLabel') }}</label>
     <select class="league-select" :value="season" @change="changeSeason($event.target.value)">
@@ -290,7 +290,7 @@ function goPlayer(id) {
     </select>
   </div>
 
-  <!-- Nhánh đấu (knockout) -->
+  <!-- Bracket (knockout) -->
   <div v-if="tab === 'bracket'">
     <div v-if="brLoading"><div class="skeleton" style="height:240px"></div></div>
     <KnockoutBracket v-else :matches="bracket" />
@@ -298,7 +298,7 @@ function goPlayer(id) {
 
   <div v-else-if="loading && tab !== 'fixtures'" class="skeleton" style="height:200px"></div>
 
-  <!-- Lịch đấu: kết quả gần đây + trận sắp tới -->
+  <!-- Fixtures: recent results + upcoming matches -->
   <div v-else-if="tab === 'fixtures'">
     <div v-if="fxLoading">
       <div class="skeleton" v-for="n in 4" :key="n"></div>
@@ -316,7 +316,7 @@ function goPlayer(id) {
     </template>
   </div>
 
-  <!-- Bảng xếp hạng (1 bảng cho giải thường, nhiều bảng cho World Cup) -->
+  <!-- Standings (1 table for regular leagues, several groups for the World Cup) -->
   <div v-else-if="tab === 'standings'">
     <div v-if="groups.length === 0" class="center">{{ $t('noStandings') }}</div>
     <template v-else>
@@ -345,7 +345,7 @@ function goPlayer(id) {
                 <td><strong>{{ row.points }}</strong></td>
                 <td class="form-td">
                   <span v-if="row.form" class="std-form">
-                    <!-- API trả form theo MỚI->CŨ; đảo lại để hiện CŨ->MỚI (mới nhất bên phải). -->
+                    <!-- The API returns form NEWEST->OLDEST; reverse it to show OLDEST->NEWEST (latest on the right). -->
                     <span v-for="(r, i) in String(row.form).slice(0, 5).split('').reverse()" :key="i" class="form-b" :class="'f-' + r">{{ r }}</span>
                   </span>
                   <span v-else class="muted">–</span>
@@ -361,7 +361,7 @@ function goPlayer(id) {
     </template>
   </div>
 
-  <!-- Bảng xếp hạng cá nhân: Vua phá lưới / Kiến tạo / Thẻ vàng / Thẻ đỏ -->
+  <!-- Player leaderboards: Top scorers / Assists / Yellow cards / Red cards -->
   <div v-else>
     <div v-if="boardLoading" class="skeleton" style="height:200px"></div>
     <div v-else-if="activeBoard.length === 0" class="center">{{ tab === 'scorers' ? $t('noScorers') : $t('noLeaderboard') }}</div>
@@ -389,11 +389,11 @@ function goPlayer(id) {
 </template>
 
 <style scoped>
-/* Cột Form ở bảng xếp hạng: dùng lại chip .form-b toàn cục nhưng thu nhỏ cho gọn bảng */
+/* Form column in the standings: reuses the global .form-b chips but smaller to fit the table */
 .std-form { display: inline-flex; gap: 3px; }
 .std-form .form-b { width: 17px; height: 17px; font-size: 9px; border-radius: 4px; }
 .form-th, .form-td { text-align: center; white-space: nowrap; }
-/* Tô sáng dòng đội đang theo dõi (nền vàng nhạt + sao, hợp với nút "Theo dõi") */
+/* Highlight the followed team's row (light yellow background + star, matching the "Follow" button) */
 .standings tbody tr.fav-team td { background: rgba(245, 197, 66, 0.18); }
 .fav-star { color: #f5c542; margin-left: 5px; font-size: 12px; }
 </style>

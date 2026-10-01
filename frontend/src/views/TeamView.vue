@@ -10,16 +10,16 @@ import { teamName } from '../utils/countryNames'
 
 const route = useRoute()
 const router = useRouter()
-// teamId phải REACTIVE: khi đổi đội (đổi :id) thì các computed phụ thuộc cũng cập nhật.
+// teamId must be REACTIVE: when the team changes (:id changes) the dependent computeds update too.
 const teamId = computed(() => Number(route.params.id))
 const team = ref(null)
 const recent = ref([])
 const upcoming = ref([])
 const loading = ref(true)
-const insights = ref(null)          // thống kê mùa + chấn thương (tải lười)
+const insights = ref(null)          // season stats + injuries (lazy loaded)
 const insightsLoading = ref(false)
 
-// Kết quả 1 trận xét theo đội đang xem: W / D / L.
+// Result of one match from the viewed team's perspective: W / D / L.
 function resultFor(m) {
   const gh = m.goals.home, ga = m.goals.away
   if (gh === ga) return 'D'
@@ -27,7 +27,7 @@ function resultFor(m) {
   const isHome = m.teams.home.id === teamId.value
   return (homeWon && isHome) || (!homeWon && !isHome) ? 'W' : 'L'
 }
-// recent = mới->cũ; đảo lại để phong độ hiện CŨ->MỚI (trận mới nhất bên phải).
+// recent = newest->oldest; reverse so form shows OLDEST->NEWEST (latest match on the right).
 const form = computed(() => recent.value.map(resultFor).reverse())
 
 let loadSeq = 0
@@ -44,23 +44,23 @@ async function loadTeam(id) {
     api.get(`/teams/${id}/fixtures`),
     api.get(`/teams/${id}/upcoming`),
   ])
-  if (seq !== loadSeq) return                    // đã chuyển sang đội khác
+  if (seq !== loadSeq) return                    // already switched to another team
   if (tRes.status === 'fulfilled') team.value = tRes.value.data.response?.[0] || null
-  setTitle(team.value ? teamName(team.value.team.name) : null)   // tiêu đề tab = tên đội
+  setTitle(team.value ? teamName(team.value.team.name) : null)   // tab title = team name
   if (fRes.status === 'fulfilled') recent.value = fRes.value.data.response || []
   if (uRes.status === 'fulfilled') upcoming.value = uRes.value.data.response || []
   loading.value = false
-  // Thống kê mùa + chấn thương: tải sau, không chặn trang (backend dò giải + gọi thêm).
+  // Season stats + injuries: loaded later, doesn't block the page (backend looks up leagues + makes extra calls).
   try {
     const ins = await api.get(`/teams/${id}/insights`, { timeout: 60000 })
     if (seq === loadSeq) insights.value = ins.data
-  } catch (e) { /* bỏ qua */ }
+  } catch (e) { /* ignore */ }
   finally { if (seq === loadSeq) insightsLoading.value = false }
 }
 
-// keep-alive: component bị cache, KHÔNG remount. Chỉ tải lại khi đây đúng là trang đang
-// xem (route.name === 'team') VÀ là đội khác đội đã tải -> tránh tải nhầm khi bị cache,
-// và tránh tải lại (mất vị trí cuộn) khi back về đúng đội cũ.
+// keep-alive: the component is cached, NOT remounted. Only reload when this really is the page being
+// viewed (route.name === 'team') AND it's a different team from the one loaded -> avoids loading by mistake while cached,
+// and avoids reloading (losing scroll position) when going back to the same team.
 let loadedId = null
 function syncTeam() {
   if (route.name !== 'team') return
@@ -73,7 +73,7 @@ onMounted(syncTeam)
 watch(() => route.params.id, syncTeam)
 onActivated(() => { if (route.name === 'team') setTitle(team.value ? teamName(team.value.team.name) : null) })
 
-// Tỉ số luân lưu (nếu có) -> hiện thêm cạnh tỉ số để biết đội nào thắng khi hoà.
+// Penalty shootout score (if any) -> shown next to the score so you know who won a draw.
 function penStr(m) {
   const p = m?.score?.penalty
   return (p && p.home != null && p.away != null) ? `${p.home}-${p.away}` : null
@@ -100,20 +100,20 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
       </div>
     </div>
 
-    <!-- Phong độ -->
+    <!-- Form -->
     <div v-if="form.length" class="form-row">
       <span class="muted" style="font-size:13px">{{ $t('form') }}</span>
       <span v-for="(r, i) in form" :key="i" class="form-b" :class="'f-' + r">{{ r }}</span>
     </div>
 
-    <!-- Thống kê mùa + chấn thương (tải lười) -->
+    <!-- Season stats + injuries (lazy loaded) -->
     <TeamInsights
       :statistics="insights?.statistics || {}"
       :injuries="insights?.injuries || []"
       :loading="insightsLoading"
     />
 
-    <!-- Trận sắp đá -->
+    <!-- Upcoming matches -->
     <template v-if="upcoming.length">
       <h2 class="page-title" style="font-size:16px">{{ $t('upcomingMatches') }}</h2>
       <div
@@ -129,7 +129,7 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
       </div>
     </template>
 
-    <!-- Trận gần đây -->
+    <!-- Recent matches -->
     <template v-if="recent.length">
       <h2 class="page-title" style="font-size:16px">{{ $t('recentMatches') }}</h2>
       <div
@@ -145,7 +145,7 @@ function goMatch(id) { router.push({ name: 'match', params: { id } }) }
       </div>
     </template>
 
-    <!-- Đội hình -->
+    <!-- Squad -->
     <h2 class="page-title">{{ $t('squad') }}</h2>
     <router-link
       v-for="p in team.squad"

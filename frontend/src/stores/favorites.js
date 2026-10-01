@@ -1,21 +1,21 @@
 import { defineStore } from 'pinia'
 
-// Đọc/ghi localStorage an toàn (bọc try/catch phòng trình duyệt chặn).
+// Safe localStorage read/write (wrapped in try/catch in case the browser blocks it).
 function load(key) {
   try { return JSON.parse(localStorage.getItem(key) || '[]') } catch (e) { return [] }
 }
 function save(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)) } catch (e) { /* bỏ qua */ }
+  try { localStorage.setItem(key, JSON.stringify(val)) } catch (e) { /* ignore */ }
 }
 
-// Lưu đội + cầu thủ yêu thích ngay trên máy (localStorage).
-// Phase sau có thể đồng bộ lên Supabase mà giữ nguyên interface này.
+// Store favourite teams + players on the device (localStorage).
+// Can later sync to Supabase while keeping this same interface.
 export const useFavoritesStore = defineStore('favorites', {
   state: () => ({
     teams: load('fav_teams'),
     players: load('fav_players'),
-    leagues: load('fav_leagues'),   // giải đã follow (key localStorage riêng -> không đụng team/player)
-    matches: load('fav_matches'),   // trận đã follow
+    leagues: load('fav_leagues'),   // followed leagues (separate localStorage key -> does not touch team/player)
+    matches: load('fav_matches'),   // followed matches
   }),
   getters: {
     isTeamFav: (s) => (id) => s.teams.some((t) => t.id === id),
@@ -36,14 +36,14 @@ export const useFavoritesStore = defineStore('favorites', {
       else this.players.push({ id: player.id, name: player.name, photo: player.photo })
       save('fav_players', this.players)
     },
-    // Giải: lưu id + tên + logo để hiện lại ở trang Theo dõi (link thẳng vào /league/:id).
+    // League: store id + name + logo to show on the Following page (links straight to /league/:id).
     toggleLeague(league) {
       const i = this.leagues.findIndex((l) => l.id === league.id)
       if (i >= 0) this.leagues.splice(i, 1)
       else this.leagues.push({ id: league.id, name: league.name, logo: league.logo })
       save('fav_leagues', this.leagues)
     },
-    // Trận: lưu 2 đội + ngày + tên giải để hiện lại (link thẳng vào /match/:id).
+    // Match: store both teams + date + league name to show again (links straight to /match/:id).
     toggleMatch(match) {
       const i = this.matches.findIndex((m) => m.id === match.id)
       if (i >= 0) this.matches.splice(i, 1)

@@ -12,10 +12,10 @@ import { t, state } from '../i18n'
 const store = useFixturesStore()
 const { fixtures, loading, error } = storeToRefs(store)
 
-// Múi giờ của người đang xem (vd "Asia/Ho_Chi_Minh", "Australia/Sydney").
+// Viewer's time zone (e.g. "Asia/Ho_Chi_Minh", "Australia/Sydney").
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-// ---- Dải ngày theo GIỜ ĐỊA PHƯƠNG của người xem ----
+// ---- Date strip in the viewer's LOCAL TIME ----
 function localISO(dt) {
   const y = dt.getFullYear()
   const m = String(dt.getMonth() + 1).padStart(2, '0')
@@ -26,18 +26,18 @@ function buildDates() {
   const out = []
   const base = new Date()
   for (let d = -2; d <= 4; d++) {
-    const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate() + d) // nửa đêm giờ địa phương
+    const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate() + d) // local midnight
     out.push({ iso: localISO(dt), dt, today: d === 0 })
   }
   return out
 }
 const dates = ref(buildDates())
 const selectedDate = ref(dates.value.find((d) => d.today).iso)
-// Gói PRO: xem được mọi ngày (quá khứ + tương lai) -> không giới hạn ô chọn ngày nữa.
+// PRO plan: any date is available (past + future) -> no limit on the date picker any more.
 
-// Nhãn ngày hiển thị: TỰ định dạng theo ngôn ngữ web (VI/EN) thay vì để <input type=date>
-// hiện theo ngôn ngữ HỆ ĐIỀU HÀNH (vd iPhone tiếng Việt sẽ ra "ngày 12 thg 6" dù web đang EN).
-// toLocaleDateString có truyền locale rõ ràng -> luôn đúng ngôn ngữ web dù máy đặt gì.
+// Displayed date label: formatted OURSELVES by the site language (VI/EN) instead of letting <input type=date>
+// follow the OPERATING SYSTEM language (e.g. a Vietnamese iPhone shows "ngày 12 thg 6" even when the site is in EN).
+// toLocaleDateString with an explicit locale -> always matches the site language whatever the device is set to.
 const dateInput = ref(null)
 const dateLabel = computed(() => {
   const parts = String(selectedDate.value || '').split('-')
@@ -48,22 +48,22 @@ const dateLabel = computed(() => {
   const loc = state.locale === 'vi' ? 'vi-VN' : 'en-GB'
   return dt.toLocaleDateString(loc, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
 })
-// Desktop: click vào vùng ngày cần gọi showPicker() để mở lịch (mobile thì tự mở khi chạm).
+// Desktop: clicking the date area must call showPicker() to open the calendar (mobile opens it on tap).
 function openDatePicker() {
-  try { dateInput.value?.showPicker?.() } catch (e) { /* trình duyệt cũ / mobile mở sẵn */ }
+  try { dateInput.value?.showPicker?.() } catch (e) { /* older browsers / mobile already open it */ }
 }
-// Thiết bị cảm ứng (điện thoại/máy tính bảng)? -> dùng nhãn tự định dạng (vì iOS bỏ qua `lang`).
-// Máy tính (chuột/trackpad) -> dùng input ngày GỐC để GÕ SỐ chỉnh ngày được; input gốc trên
-// desktop tôn trọng `lang` nên vẫn hiện đúng định dạng theo VI/EN.
-// '(pointer: coarse)' = con trỏ CHÍNH là cảm ứng (điện thoại/máy tính bảng). Laptop có
-// màn cảm ứng nhưng trỏ chính là trackpad/chuột -> vẫn là 'fine' -> dùng input gõ số được.
+// Touch device (phone/tablet)? -> use the self-formatted label (because iOS ignores `lang`).
+// Computer (mouse/trackpad) -> use the NATIVE date input so the date can be TYPED; the native input on
+// desktop respects `lang`, so it still shows the right VI/EN format.
+// '(pointer: coarse)' = the PRIMARY pointer is touch (phone/tablet). A laptop with
+// a touchscreen still has trackpad/mouse as primary -> 'fine' -> uses the typeable input.
 const isTouch = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)')?.matches
 const dateLang = computed(() => (state.locale === 'vi' ? 'vi' : 'en-GB'))
 
 function todayIso() {
   return localISO(new Date())
 }
-// Nếu đã sang ngày mới (để tab mở qua đêm) -> dựng lại dải ngày, đẩy "Hôm nay" sang đúng ngày.
+// If the day has rolled over (tab left open overnight) -> rebuild the date strip and move "Today" to the right date.
 function maybeRollDate() {
   const stripToday = dates.value.find((d) => d.today)?.iso
   if (stripToday && stripToday !== todayIso()) {
@@ -75,7 +75,7 @@ function maybeRollDate() {
 function onVisible() {
   if (document.hidden) return
   maybeRollDate()
-  // Quay lại tab: nếu đang có trận live/sắp đá thì làm mới ngay (khỏi đợi tới 15s sau).
+  // Back on the tab: if there are live/upcoming matches, refresh now (instead of waiting up to 15s).
   if (selectedDate.value === todayIso() && hasLiveOrImminent()) load(true)
 }
 
@@ -90,34 +90,34 @@ function dayNum(d) {
   return new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'numeric' }).format(d.dt)
 }
 
-// ---- Lọc giải ----
+// ---- League filter ----
 const leagues = ref([])
-const selectedLeague = ref('') // '' = tất cả
+const selectedLeague = ref('') // '' = all
 
 async function load(silent = false) {
-  // LUÔN tải mọi trận trong ngày (chỉ theo date + tz), KHÔNG lọc giải ở backend.
-  // Lý do: lọc theo giải ở API bắt buộc kèm "season", mà không thể đoán đúng mùa cho mọi
-  // giải (Nam Mỹ/Bắc Âu chạy năm dương lịch, châu Âu vắt 2 năm, World Cup ghim năm...).
-  // -> Lọc giải làm Ở CLIENT từ danh sách đầy đủ này (xem computed `grouped`) cho chuẩn mọi giải.
+  // ALWAYS load every match of the day (by date + tz only), do NOT filter by league in the backend.
+  // Reason: filtering by league in the API requires a "season", and the right season can't be guessed for every
+  // league (South America/Nordics run on the calendar year, Europe spans 2 years, World Cup is pinned to a year...).
+  // -> League filtering is done ON THE CLIENT from this full list (see computed `grouped`) so it works for every league.
   await store.fetchFixtures({ date: selectedDate.value, tz }, { silent })
 }
 
-// Thứ tự ưu tiên trong mỗi giải: đang đá (0) -> sắp đá (1) -> đã kết thúc (2).
+// Priority within each league: live (0) -> upcoming (1) -> finished (2).
 function matchRank(f) {
   const s = f.fixture?.status?.short
-  if (isLiveFixture(f)) return 0                    // đang đá THẬT -> lên đầu
-  if (isFinished(s) || isStaleLive(f)) return 2     // đã xong (gồm cả 'live treo') -> xuống cuối
+  if (isLiveFixture(f)) return 0                    // REALLY live -> to the top
+  if (isFinished(s) || isStaleLive(f)) return 2     // finished (including 'stale live') -> to the bottom
   return 1
 }
 
-// Gom theo giải, rồi sắp xếp mỗi giải: live lên đầu, kế đến trận chưa đá (theo giờ),
-// cuối cùng là trận đã xong. Cùng nhóm thì xếp theo giờ đá tăng dần.
+// Group by league, then sort each league: live first, then not-started matches (by kick-off time),
+// finished matches last. Within a group, sort by kick-off time ascending.
 const grouped = computed(() => {
-  const lf = selectedLeague.value ? Number(selectedLeague.value) : null   // giải đang lọc (nếu có)
+  const lf = selectedLeague.value ? Number(selectedLeague.value) : null   // league being filtered (if any)
   const map = {}
   for (const f of fixtures.value) {
-    if (!f?.league?.id) continue          // bỏ qua fixture thiếu league -> tránh crash
-    if (lf && f.league.id !== lf) continue // lọc theo giải đã chọn (client-side, đúng mọi giải)
+    if (!f?.league?.id) continue          // skip fixtures missing a league -> avoid crashes
+    if (lf && f.league.id !== lf) continue // filter by the selected league (client-side, correct for every league)
     const key = f.league.id
     if (!map[key]) map[key] = { league: f.league, matches: [] }
     map[key].matches.push(f)
@@ -133,32 +133,32 @@ const grouped = computed(() => {
   return groups
 })
 
-// Chỉ đổi NGÀY mới cần tải lại từ API; đổi GIẢI thì `grouped` tự lọc lại (không gọi API thừa).
+// Only changing the DATE needs an API reload; changing the LEAGUE just re-filters `grouped` (no extra API call).
 watch(selectedDate, () => load())
 
-// Auto-refresh: làm mới ngầm (nhịp 15s) để cập nhật tỉ số trận đang đá.
-// 15s = nhịp làm tươi của API-Football (poll nhanh hơn cũng không có dữ liệu mới).
-// Backend cache (LIVE_TTL=15s, dùng chung) đảm bảo dù 100 user cùng poll thì
-// API-Football vẫn chỉ bị gọi tối đa 1 lần mỗi 15s cho mỗi cache key.
+// Auto-refresh: silent refresh (every 15s) to update scores of live matches.
+// 15s = API-Football's refresh rate (polling faster gives no new data).
+// The backend cache (LIVE_TTL=15s, shared) ensures that even if 100 users poll at once,
+// API-Football is still called at most once every 15s per cache key.
 let timer = null
 
-// Cửa sổ poll quanh giờ bóng lăn: bắt đầu sớm 15p trước, và còn poll tới 30p sau giờ đá
-// (phòng trường hợp status cập nhật trễ vài phút sau khi trận thực sự bắt đầu).
+// Polling window around kick-off: start 15 min early, and keep polling until 30 min after kick-off
+// (in case the status updates a few minutes after the match actually starts).
 const POLL_LEAD_MS = 15 * 60 * 1000
 const POLL_GRACE_MS = 30 * 60 * 1000
-// Chỉ trận CHƯA ĐÁ thật sự (NS/TBD) mới được tính là "sắp đá". KHÔNG tính các trận
-// hoãn/huỷ/bỏ (PST/CANC/ABD/SUSP...) — chúng có giờ đá trong quá khứ nhưng không bao giờ
-// chuyển sang live, nếu tính sẽ làm poll chạy hoài vô ích.
+// Only matches that have REALLY not started (NS/TBD) count as "upcoming". Do NOT count
+// postponed/cancelled/abandoned matches (PST/CANC/ABD/SUSP...) — they have a kick-off time in the past but never
+// go live; counting them would keep polling forever for nothing.
 const SCHEDULED = ['NS', 'TBD']
 
-// Có trận nào ĐÁNG để poll không? = đang đá, HOẶC sắp đá (NS/TBD và giờ đá nằm trong
-// khoảng [now-30p, now+15p]). Không có trận nào như vậy -> khỏi gọi API, tiết kiệm quota
-// (vd 3h sáng không trận, hoặc cả ngày toàn trận đã xong -> im hẳn).
+// Is any match WORTH polling? = live, OR upcoming (NS/TBD with kick-off in
+// [now-30m, now+15m]). No such match -> skip the API call and save quota
+// (e.g. 3am with no matches, or a day where every match is finished -> fully quiet).
 function hasLiveOrImminent() {
   const now = Date.now()
   for (const f of fixtures.value) {
     const s = f.fixture?.status?.short
-    if (isLiveFixture(f)) return true   // CHỈ trận đang đá thật mới đáng poll (bỏ 'live treo')
+    if (isLiveFixture(f)) return true   // ONLY really-live matches are worth polling (ignore 'stale live')
     if (SCHEDULED.includes(s)) {
       const kickoff = new Date(f.fixture.date).getTime()
       if (!Number.isNaN(kickoff) && kickoff <= now + POLL_LEAD_MS && kickoff >= now - POLL_GRACE_MS) return true
@@ -167,8 +167,8 @@ function hasLiveOrImminent() {
   return false
 }
 
-// Interval vẫn chạy mỗi 15s nhưng CHỈ gọi API khi: tab hiển thị + đang xem hôm nay +
-// có trận live/sắp đá. Bản thân setInterval không tốn request; chỉ load(true) mới tốn.
+// The interval still ticks every 15s but ONLY calls the API when: tab visible + viewing today +
+// there are live/upcoming matches. setInterval itself costs no requests; only load(true) does.
 function startPolling() {
   clearInterval(timer)
   timer = setInterval(() => {
@@ -186,18 +186,18 @@ onMounted(async () => {
   try {
     const { data } = await api.get('/leagues')
     leagues.value = data.response || []
-  } catch (e) { /* không sao, vẫn dùng bộ lọc 'Tất cả' */ }
+  } catch (e) { /* no problem, the 'All' filter is still used */ }
   load()
 })
-// keep-alive: rời Home (vào chi tiết) -> dừng poll; quay lại -> bật lại.
-// (onActivated chạy cả lần mount đầu tiên nên không cần gọi trong onMounted.)
+// keep-alive: leaving Home (to a detail page) -> stop polling; coming back -> start again.
+// (onActivated also runs on the first mount, so no need to call it in onMounted.)
 onActivated(startPolling)
 onDeactivated(stopPolling)
 onUnmounted(stopPolling)
 </script>
 
 <template>
-  <!-- Dải ngày -->
+  <!-- Date strip -->
   <div class="date-strip">
     <button
       v-for="d in dates"
@@ -211,21 +211,21 @@ onUnmounted(stopPolling)
     </button>
   </div>
 
-  <!-- Tìm giải / quốc gia -->
+  <!-- Search league / country -->
   <div class="filter-row">
     <SearchBox />
   </div>
 
-  <!-- Lọc giải -->
+  <!-- League filter -->
   <div class="filter-row">
     <label class="muted" style="font-size:13px">{{ $t('league') }}</label>
     <select v-model="selectedLeague" class="league-select">
       <option value="">{{ $t('all') }}</option>
       <option v-for="l in leagues" :key="l.id" :value="l.id">{{ leagueName(l.name, l.id) }}</option>
     </select>
-    <!-- Máy tính: input ngày GỐC để gõ số chỉnh ngày được (lang -> định dạng đúng VI/EN) -->
+    <!-- Computer: NATIVE date input so the date can be typed (lang -> correct VI/EN format) -->
     <input v-if="!isTouch" type="date" v-model="selectedDate" class="league-select" :lang="dateLang" />
-    <!-- Điện thoại/cảm ứng: nhãn tự định dạng theo VI/EN, input gốc ẩn trong suốt để mở lịch -->
+    <!-- Phone/touch: self-formatted VI/EN label, with a transparent native input on top to open the calendar -->
     <span v-else class="league-select date-pick" @click="openDatePicker">
       <span class="date-pick-text">{{ dateLabel }}</span>
       <input ref="dateInput" type="date" v-model="selectedDate" class="date-pick-native" :aria-label="dateLabel" />
@@ -253,7 +253,7 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
-/* Ô chọn ngày: nhãn chữ (tự định dạng VI/EN) + input gốc ẩn trong suốt đè lên để mở lịch */
+/* Date picker: text label (self-formatted VI/EN) + transparent native input layered on top to open the calendar */
 .date-pick { position: relative; display: inline-flex; align-items: center; white-space: nowrap; }
 .date-pick-native {
   position: absolute; inset: 0; width: 100%; height: 100%;

@@ -26,9 +26,9 @@ async function load() {
   }
 }
 
-// keep-alive: component bị cache, KHÔNG remount. Chỉ tải lại khi đây đúng là trang đang
-// xem (route.name === 'matches') VÀ từ khoá khác lần tải trước -> tránh xoá/tải lại kết quả
-// (mất vị trí cuộn) khi rời trang rồi back lại.
+// keep-alive: the component is cached, NOT remounted. Only reload when this really is the page being
+// viewed (route.name === 'matches') AND the query differs from the last load -> avoids clearing/reloading results
+// (losing scroll position) when leaving the page and coming back.
 let loadedQ = null
 function syncSearch() {
   if (route.name !== 'matches') return
@@ -44,7 +44,7 @@ watch(() => route.query.q, syncSearch)
 <template>
   <a href="#" class="back" @click.prevent="$router.back()">{{ $t('backHome') }}</a>
 
-  <!-- Tiêu đề: A vs B hoặc 1 đội -->
+  <!-- Title: A vs B or a single team -->
   <div v-if="data && data.mode === 'h2h' && data.teamA && data.teamB" class="ms-head">
     <span class="ms-team"><img loading="lazy" :src="data.teamA.logo" @error="imgFallback" />{{ teamName(data.teamA.name) }}</span>
     <span class="ms-vs">vs</span>
@@ -58,15 +58,15 @@ watch(() => route.query.q, syncSearch)
   <div v-if="loading" class="center">{{ $t('loadingMatches') }}</div>
   <div v-else-if="error" class="error-box">{{ error }} {{ $t('backendErr') }}</div>
 
-  <!-- Không tìm thấy đội -->
+  <!-- Team not found -->
   <div v-else-if="data && data.notFound && data.notFound.length" class="center">
     {{ $t('teamNotFound') }}: "{{ data.notFound.join(', ') }}"
   </div>
 
-  <!-- Chưa nhập gì -->
+  <!-- Nothing entered yet -->
   <div v-else-if="!data" class="center">{{ $t('searchMatchHint') }}</div>
 
-  <!-- Kết quả -->
+  <!-- Results -->
   <template v-else>
     <section class="ms-section">
       <h3 class="ms-section__title">{{ $t('upcomingMatches') }}</h3>

@@ -6,27 +6,27 @@ import { teamName } from '../utils/countryNames'
 
 const props = defineProps({
   fixture: { type: Object, required: true },
-  // Bật để hiện thêm NGÀY (cho các tab lịch đấu trải nhiều ngày: giải, quốc gia).
-  // Trang chủ gom theo 1 ngày nên không cần -> mặc định tắt.
+  // Enable to also show the DATE (for fixture tabs spanning many days: league, country).
+  // The home page groups by a single day, so it is not needed -> off by default.
   showDate: { type: Boolean, default: false },
 })
 const router = useRouter()
 
-// QUAN TRỌNG: dùng computed (đọc props.fixture mỗi lần) thay vì "snapshot" lúc setup.
-// HomeView auto-refresh 15s gán lại mảng fixtures (object MỚI nhưng cùng :key) -> nếu
-// snapshot bằng `const f = props.fixture` thì tỉ số/phút trận live bị "đóng băng".
-// computed cập nhật được mỗi khi prop đổi -> card live tự lên điểm.
+// IMPORTANT: use computed (reads props.fixture every time) instead of a 'snapshot' taken at setup.
+// HomeView auto-refreshes every 15s and reassigns the fixtures array (NEW objects with the same :key) -> if
+// we snapshot with `const f = props.fixture`, the live score/minute would be 'frozen'.
+// computed updates whenever the prop changes -> live cards update their score automatically.
 const f = computed(() => props.fixture)
-// "Live treo" (status kẹt đang đá nhiều giờ) -> coi như đã kết thúc, không hiện badge LIVE.
+// 'Stuck live' (status stuck in play for hours) -> treat as finished, do not show the LIVE badge.
 const live = computed(() => isLiveFixture(props.fixture))
 const finished = computed(() => isFinished(props.fixture.fixture.status.short) || isStaleLive(props.fixture))
-// Trận bị huỷ/hoãn -> hiện nhãn riêng thay vì giờ đá (tránh tưởng nhầm "sắp đá").
+// Cancelled/postponed match -> show a separate label instead of the kick-off time (avoids looking 'upcoming').
 const off = computed(() => isOff(props.fixture.fixture.status.short))
 const offLabel = computed(() => offStatusKey(props.fixture.fixture.status.short))
-// Đang nghỉ giữa hiệp (HT/BT/P): hiện nhãn "Giải lao"... thay vì phút.
+// At a break (HT/BT/P): show a label such as 'Half-time' instead of the minute.
 const onBreak = computed(() => live.value && isBreak(props.fixture.fixture.status.short))
 const breakLabel = computed(() => breakStatusKey(props.fixture.fixture.status.short))
-// Tỉ số luân lưu (nếu trận đá penalty) -> hiện số nhỏ cạnh tỉ số mỗi đội để biết ai thắng khi hoà.
+// Penalty shoot-out score (if the match went to penalties) -> small number next to each team's score to show who won the draw.
 const pen = computed(() => {
   const p = props.fixture?.score?.penalty
   return (p && p.home != null && p.away != null) ? p : null
@@ -39,7 +39,7 @@ function open() {
 
 <template>
   <div class="match-card" @click="open">
-    <!-- Cột trạng thái: LIVE + phút, hoặc FT, hoặc giờ đá -->
+    <!-- Status column: LIVE + minute, or FT, or kick-off time -->
     <div class="match-card__status">
       <div v-if="showDate" class="mc-date">{{ matchDay(f.fixture.date) }}</div>
       <template v-if="live">
@@ -58,7 +58,7 @@ function open() {
       </template>
     </div>
 
-    <!-- Hai đội -->
+    <!-- The two teams -->
     <div class="match-card__teams">
       <div class="team-row" :class="{ winner: f.teams.home.winner, loser: finished && !f.teams.home.winner && f.teams.home.winner !== null }">
         <img loading="lazy" :src="f.teams.home.logo" :alt="f.teams.home.name" @error="imgFallback" />
@@ -70,7 +70,7 @@ function open() {
       </div>
     </div>
 
-    <!-- Tỉ số (ẩn nếu chưa đá) -->
+    <!-- Score (hidden if not played yet) -->
     <div class="match-card__score" v-if="f.goals.home !== null">
       <div class="g">{{ f.goals.home }}<span v-if="pen" class="pmini">({{ pen.home }})</span></div>
       <div class="g">{{ f.goals.away }}<span v-if="pen" class="pmini">({{ pen.away }})</span></div>

@@ -4,30 +4,30 @@ import { imgFallback } from '../utils/format'
 import { teamName } from '../utils/countryNames'
 import { roundLabel } from '../utils/roundNames'
 
-// Nhận mảng trận VÒNG KNOCKOUT (từ /leagues/:id/bracket) -> dựng cây nhánh đấu.
+// Takes an array of KNOCKOUT matches (from /leagues/:id/bracket) -> builds the bracket tree.
 const props = defineProps({ matches: { type: Array, required: true } })
 
 const FINISHED = ['FT', 'AET', 'PEN', 'WO', 'AWD']
 
-// Độ sâu của vòng (nhỏ = sớm, lớn = sâu). Xét semi/quarter/r16 TRƯỚC final vì các tên đó
-// cũng chứa chữ "final". 3rd place -> -1 (loại khỏi cây).
+// Depth of a round (small = early, large = later). Check semi/quarter/r16 BEFORE final because those names
+// also contain the word "final". 3rd place -> -1 (excluded from the tree).
 function roundRank(r) {
   const s = (r || '').toLowerCase()
   if (/3rd place|third place|play-off for/.test(s)) return -1
   if (/semi|1\/2/.test(s)) return 6
   if (/quarter|1\/4|last 8/.test(s)) return 5
-  // "8th Finals" = vòng 1/8 (R16); "16th Finals" = vòng 1/16 (R32) — API World Cup hay dùng kiểu này.
+  // "8th Finals" = round of 16 (R16); "16th Finals" = round of 32 (R32); the World Cup API often uses this style.
   if (/round of 16|1\/8|last 16|8th final/.test(s)) return 4
   if (/round of 32|1\/16|16th final/.test(s)) return 3
   if (/round of 64|1\/32|32nd final/.test(s)) return 2
-  // Vòng play-off 1/8 của thể thức league-phase mới (C1/C2/C3) — xét TRƯỚC play-off chung.
+  // Knockout play-off round of the new league-phase format (UCL/UEL/UECL); checked BEFORE the generic play-off.
   if (/knockout round play|knockout play/.test(s)) return 2
   if (/\bfinal\b/.test(s)) return 7
   if (/play-?off/.test(s)) return 1
   return 0
 }
 
-// Dựng 1 "cặp đấu" (tie) từ các lượt (1 hoặc 2 trận) giữa cùng 2 đội.
+// Build one 'tie' from the legs (1 or 2 matches) between the same two teams.
 function buildTie(key, legsIn) {
   const legs = legsIn.slice().sort((a, b) => (a.fixture.date || '').localeCompare(b.fixture.date || ''))
   const first = legs[0]
@@ -41,7 +41,7 @@ function buildTie(key, legsIn) {
     if (m.teams.home.id === teamA.id) { aScores.push(hg); bScores.push(ag); aggA += hg; aggB += ag }
     else { aScores.push(ag); bScores.push(hg); aggA += ag; aggB += hg }
   }
-  // Luân lưu lấy từ lượt cuối (nếu có).
+  // Penalty shoot-out taken from the last leg (if any).
   let penA = null, penB = null
   const last = legs[legs.length - 1]
   const p = last.score?.penalty
@@ -60,10 +60,10 @@ function buildTie(key, legsIn) {
 
 const columns = computed(() => {
   const ms = (props.matches || []).filter((m) => roundRank(m.league?.round) > 0)
-  // Gom theo tên vòng.
+  // Group by round name.
   const byRound = {}
   for (const m of ms) { const r = m.league.round; (byRound[r] = byRound[r] || []).push(m) }
-  // Mỗi vòng -> các tie (gom theo cặp đội).
+  // Each round -> ties (grouped by team pair).
   const tiesByRank = {}, nameByRank = {}
   for (const rname of Object.keys(byRound)) {
     const rank = roundRank(rname)
@@ -74,7 +74,7 @@ const columns = computed(() => {
       ;(pairs[k] = pairs[k] || []).push(m)
     }
     const ties = Object.keys(pairs).map((k) => buildTie(k, pairs[k]))
-    // Bỏ vòng quá lớn (>16 cặp, vd FA Cup vòng 1/128) để cây gọn, không tràn.
+    // Skip rounds that are too large (>16 ties, e.g. FA Cup round of 128) to keep the tree compact.
     if (ties.length > 16) continue
     nameByRank[rank] = rname
     tiesByRank[rank] = (tiesByRank[rank] || []).concat(ties)
@@ -82,7 +82,7 @@ const columns = computed(() => {
   const ranks = Object.keys(tiesByRank).map(Number).sort((a, b) => a - b)
   if (!ranks.length) return []
 
-  // Sắp xếp ties để cây thẳng hàng: đệ quy TỪ vòng sâu nhất (chung kết) ngược về.
+  // Order the ties so the tree lines up: recurse FROM the deepest round (final) backwards.
   const ordered = {}
   const pushOrd = (rank, tie) => { (ordered[rank] = ordered[rank] || []); if (!ordered[rank].includes(tie)) ordered[rank].push(tie) }
   const lowerRank = (rank) => { const lr = ranks.filter((r) => r < rank); return lr.length ? Math.max(...lr) : null }
@@ -97,7 +97,7 @@ const columns = computed(() => {
     }
   }
   for (const t of (tiesByRank[ranks[ranks.length - 1]] || [])) place(t, ranks[ranks.length - 1])
-  // Bổ sung tie nào chưa được đệ quy chạm tới (phòng dữ liệu thiếu).
+  // Add any ties not reached by the recursion (in case of missing data).
   for (const rank of ranks) for (const t of tiesByRank[rank]) pushOrd(rank, t)
 
   return ranks.map((rank) => ({ rank, name: nameByRank[rank], ties: ordered[rank] || tiesByRank[rank] }))
@@ -145,7 +145,7 @@ const hasData = computed(() => columns.value.length > 0)
 .kb-round__ties { display: flex; flex-direction: column; justify-content: space-around; flex: 1; }
 .kb-cell { display: flex; flex-direction: column; justify-content: center; flex: 1; position: relative; padding: 0 18px; }
 
-/* Đường nối: vạch ngang sang phải + vạch dọc nối từng cặp. */
+/* Connector lines: horizontal line to the right + vertical line joining each pair. */
 .kb-round:not(:last-child) .kb-cell::after {
   content: ''; position: absolute; right: 0; top: 50%; width: 18px; height: 2px; background: var(--border);
 }
@@ -168,7 +168,7 @@ const hasData = computed(() => columns.value.length > 0)
 .kb-sc b { font-size: 13px; min-width: 10px; text-align: center; font-weight: inherit; }
 .kb-agg { font-size: 10px; color: var(--text-dim); text-align: right; margin-top: 3px; }
 
-/* Điện thoại: cột hẹp + chữ nhỏ hơn để cuộn ngang gọn, không bị tràn trang. */
+/* Mobile: narrower columns + smaller text so it scrolls horizontally without overflowing the page. */
 @media (max-width: 560px) {
   .kb-round { min-width: 150px; }
   .kb-cell { padding: 0 12px; }

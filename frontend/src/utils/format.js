@@ -1,19 +1,19 @@
 import { state } from '../i18n'
 
-// Các nhóm trạng thái của API-Football
+// API-Football status groups
 export const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE']
-// WO=walkover, AWD=xử thắng: tuy bất thường nhưng ĐÃ CÓ kết quả/tỉ số -> tính là "đã xong".
+// WO=walkover, AWD=awarded: unusual, but there IS a result/score -> counted as 'finished'.
 export const FINISHED_STATUSES = ['FT', 'AET', 'PEN', 'WO', 'AWD']
 
-// Map locale của app -> mã BCP-47 cho Intl. Đọc state.locale (reactive)
-// nên khi đổi ngôn ngữ, template gọi các hàm này sẽ tự re-render.
+// Map the app locale -> BCP-47 code for Intl. Reads state.locale (reactive)
+// so when the language changes, templates calling these functions re-render automatically.
 function localeTag() {
   return state.locale === 'en' ? 'en-GB' : 'vi-VN'
 }
 
-// Trận KHÔNG diễn ra theo lịch (API-Football), KHÔNG có kết quả bình thường:
-//   PST=hoãn, SUSP=tạm dừng, INT=gián đoạn, TBD=chưa định giờ  -> nhóm "hoãn"
-//   CANC=huỷ, ABD=bỏ dở                                        -> nhóm "huỷ"
+// Matches NOT played as scheduled (API-Football) with NO normal result:
+//   PST=postponed, SUSP=suspended, INT=interrupted, TBD=time to be defined  -> 'postponed' group
+//   CANC=cancelled, ABD=abandoned                                        -> 'cancelled' group
 export const POSTPONED_STATUSES = ['PST', 'SUSP', 'INT', 'TBD']
 export const CANCELLED_STATUSES = ['CANC', 'ABD']
 
@@ -21,14 +21,14 @@ export function isLive(short) {
   return LIVE_STATUSES.includes(short)
 }
 
-// Trạng thái NGHỈ giữa các pha (cầu thủ KHÔNG đang đá): HT=giải lao, BT=nghỉ trước hiệp phụ,
-// P=đá luân lưu. Khi gặp các trạng thái này nên hiện NHÃN thay vì phút (45+6') để khỏi hiểu
-// nhầm là đang đá. Các trạng thái live khác (1H/2H/ET) vẫn hiện phút như cũ.
+// BREAK statuses between phases (players NOT playing): HT=half-time, BT=break before extra time,
+// P=penalty shoot-out. For these statuses show a LABEL instead of the minute (45+6') so it is not mistaken
+// for live play. Other live statuses (1H/2H/ET) still show the minute as before.
 export const BREAK_STATUSES = ['HT', 'BT', 'P']
 export function isBreak(short) {
   return BREAK_STATUSES.includes(short)
 }
-// Khoá i18n tương ứng từng kiểu nghỉ.
+// i18n key for each kind of break.
 export function breakStatusKey(short) {
   if (short === 'HT') return 'halftime'
   if (short === 'BT') return 'breakTime'
@@ -43,21 +43,21 @@ export function isPostponed(short) {
 export function isCancelled(short) {
   return CANCELLED_STATUSES.includes(short)
 }
-// Trận bị huỷ/hoãn (không đá đúng lịch) -> KHÔNG được hiện "Chưa đá".
+// Cancelled/postponed match (not played as scheduled) -> must NOT show 'Not started'.
 export function isOff(short) {
   return isPostponed(short) || isCancelled(short)
 }
-// Khoá i18n cho nhãn trạng thái "không đá": 'cancelled' hoặc 'postponed'.
+// i18n key for the 'not played' status label: 'cancelled' or 'postponed'.
 export function offStatusKey(short) {
   return isCancelled(short) ? 'cancelled' : 'postponed'
 }
 
 // ===== "LIVE treo" (stale live) =====
-// API-Football đôi khi để 1 trận kẹt ở trạng thái đang đá (vd '2H 82'') hàng GIỜ vì feed
-// dữ liệu của trận hạng thấp ngừng cập nhật (không bao giờ chuyển sang FT). Nếu chỉ dựa vào
-// status thì app hiện "LIVE 82'" sai và poll API mãi không ngừng -> phí quota.
-// Cách nhận biết: so SỐ PHÚT THỰC TẾ kể từ giờ bóng lăn với mức tối đa hợp lý của từng pha.
-// Hiệp 2 thực tế kết thúc trong ~2h từ kickoff; hiệp phụ/luân lưu thì rộng tay hơn.
+// API-Football sometimes leaves a match stuck in a live status (e.g. '2H 82'') for HOURS because the
+// data feed for lower-league matches stops updating (never moves to FT). If we relied only on
+// status, the app would wrongly show "LIVE 82'" and keep polling the API forever -> wasted quota.
+// How to detect it: compare the ACTUAL minutes since kick-off with a reasonable maximum for each phase.
+// The second half realistically ends within ~2h of kick-off; extra time/penalties get more slack.
 const STALE_LIMIT_MIN = { '1H': 75, 'HT': 95, '2H': 150, 'ET': 210, 'BT': 210, 'P': 220, 'LIVE': 220 }
 
 export function isStaleLive(fx) {
@@ -69,13 +69,13 @@ export function isStaleLive(fx) {
   return mins > (STALE_LIMIT_MIN[s] ?? 200)
 }
 
-// "Đang đá THẬT" = status live VÀ không phải live treo. Dùng ở mọi nơi cần biết trận có
-// thực sự đang diễn ra (hiện badge LIVE, quyết định có poll tiếp không, xếp thứ tự).
+// 'REALLY live' = live status AND not stuck-live. Used wherever we need to know whether the match is
+// actually in progress (show the LIVE badge, decide whether to keep polling, sort order).
 export function isLiveFixture(fx) {
   return isLive(fx?.fixture?.status?.short) && !isStaleLive(fx)
 }
 
-// Giờ hiển thị theo múi giờ máy người dùng (Phase 5 sẽ cho chọn timezone).
+// Time shown in the user's device timezone (Phase 5 will allow choosing a timezone).
 export function matchTime(iso) {
   try {
     return new Date(iso).toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' })
@@ -92,8 +92,8 @@ export function matchDay(iso) {
   }
 }
 
-// Như matchDay nhưng KÈM NĂM (vd "11 thg 12, 2022"). Dùng ở trang chi tiết trận để biết
-// trận thuộc năm/kỳ giải nào (quan trọng với World Cup, các giải cũ...).
+// Like matchDay but WITH THE YEAR (e.g. "11 Dec 2022"). Used on the match detail page to show
+// which year/edition the match belongs to (important for the World Cup and older competitions...).
 export function matchDayYear(iso) {
   try {
     return new Date(iso).toLocaleDateString(localeTag(), { day: '2-digit', month: 'short', year: 'numeric' })
@@ -102,15 +102,15 @@ export function matchDayYear(iso) {
   }
 }
 
-// Dữ liệu ĐỘI HÌNH của API-Football KHÔNG kèm 'photo' cho cầu thủ (chỉ có id, name,
-// number, pos, grid). Vì vậy tự dựng URL ảnh từ id theo đúng CDN của API-Football.
-// (Nếu object đã có sẵn 'photo' từ endpoint khác thì ưu tiên dùng luôn.)
+// API-Football LINE-UP data does NOT include a 'photo' for players (only id, name,
+// number, pos, grid). So we build the photo URL from the id using API-Football's CDN.
+// (If the object already has a 'photo' from another endpoint, use that first.)
 export function playerPhoto(p) {
   if (p?.photo) return p.photo
   return p?.id ? `https://media.api-sports.io/football/players/${p.id}.png` : ''
 }
 
-// Ảnh lỗi -> thay bằng placeholder để không vỡ layout.
+// Broken image -> replace with a placeholder so the layout does not break.
 export function imgFallback(e) {
   e.target.src =
     'data:image/svg+xml;utf8,' +

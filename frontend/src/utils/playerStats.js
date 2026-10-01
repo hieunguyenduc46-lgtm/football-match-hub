@@ -1,42 +1,42 @@
-// ===== Logic gộp thống kê cầu thủ DÙNG CHUNG cho mọi trang =====
-// Trước đây PlayerView và CompareView mỗi nơi tự gộp một kiểu -> số liệu lệch nhau
-// (compare cộng cả ĐTQG + giao hữu, profile thì tách CLB/ĐTQG và bỏ giao hữu).
-// Đưa hết về một chỗ để hai trang luôn tính GIỐNG HỆT nhau.
+// ===== Player statistics aggregation logic SHARED by every page =====
+// Previously PlayerView and CompareView each aggregated differently -> inconsistent numbers
+// (compare added national team + friendlies, the profile split club/national team and dropped friendlies).
+// Everything is now in one place so both pages always calculate EXACTLY the same way.
 
-// Bỏ dấu, thường hoá để so tên đội với quốc tịch ("Pháp"/"France"...).
+// Remove accents, lowercase to compare the team name with nationality ("Pháp"/"France"...).
 export function norm(s) {
   return (s || '').toLowerCase().normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '')
 }
 
-// Giải cấp ĐỘI TUYỂN (bắt cả khi tên đội != quốc tịch, vd "Korea Republic").
-// LƯU Ý: dùng \beuro(?!pa) để KHÔNG dính "Europa League" (cúp CLB).
+// NATIONAL TEAM competitions (catches cases where the team name != nationality, e.g. "Korea Republic").
+// NOTE: uses \beuro(?!pa) so it does NOT match "Europa League" (a club cup).
 export const INTL_LEAGUE = /world cup|nations league|friendl|\beuro(?!pa)|copa am|africa cup|afcon|asian cup|gold cup|olympic|qualification|qualifying|confederations cup/i
 
-// Giải cấp CLB (cúp châu lục + cúp QG) — KHÔNG bao giờ là ĐTQG, dù tên có
+// CLUB competitions (continental cups + domestic cups): NEVER national team, even if the name contains
 // "champions"/"concacaf"... (vd "CONCACAF Champions League", "UEFA Europa League",
-// "CONMEBOL Libertadores" đều là CLB). Đây là nguồn gây nhầm lẫn chính.
+// "CONMEBOL Libertadores" are clubs). This is the main source of confusion.
 export const CLUB_LEAGUE = /club world cup|champions league|champions cup|europa|conference league|libertadores|sudamericana|recopa|leagues cup|super cup|intercontinental|fa cup|copa del rey|coppa|dfb|carabao|community shield|supercopa|supercoppa/i
 
 export function isNational(s, nationality) {
   const team = s.team?.name || ''
   const league = s.league?.name || ''
-  // Cúp CLB (gồm "FIFA Club World Cup", "Club Friendlies", cúp châu lục CLB...) -> KHÔNG phải ĐTQG.
+  // Club cups (including "FIFA Club World Cup", "Club Friendlies", continental club cups...) -> NOT national team.
   if (/club/i.test(league) || CLUB_LEAGUE.test(league)) return false
-  // Tin cậy nhất: tên đội trùng quốc tịch cầu thủ ("France", "Argentina").
+  // Most reliable: the team name equals the player's nationality ("France", "Argentina").
   if (nationality && norm(team) === norm(nationality)) return true
-  // Dự phòng: tên giải thuộc nhóm đội tuyển (bắt cả khi tên đội khác quốc tịch).
+  // Fallback: the competition name is in the national team group (catches cases where the team name differs from nationality).
   return INTL_LEAGUE.test(league)
 }
 
-// Giao hữu (không tính vào thống kê "chính thức").
+// Friendlies (not counted in 'official' statistics).
 export function isFriendly(s) {
   return /friendl/i.test(s.league?.name || '')
 }
 
-// Chuẩn hoá % chuyền chính xác từ field `passes.accuracy`.
-// API-Football: ở endpoint /players (gộp cả mùa) field này đôi khi là phần trăm
-// (<=100), đôi khi là TỔNG CỘNG phần trăm các trận (>100) -> chia cho số trận.
+// Normalise pass accuracy % from the `passes.accuracy` field.
+// API-Football: in the /players endpoint (whole season) this field is sometimes a percentage
+// (<=100), sometimes the SUM of per-match percentages (>100) -> divide by the number of matches.
 export function passPct(acc, apps) {
   if (acc == null || acc === '') return null
   const n = parseFloat(acc)
@@ -44,7 +44,7 @@ export function passPct(acc, apps) {
   return n <= 100 ? Math.round(n) : Math.round(n / Math.max(apps, 1))
 }
 
-// Chuẩn hoá 1 phần tử statistics -> 1 dòng giải đấu.
+// Normalise one statistics element -> one competition row.
 export function mapEntry(s) {
   const r = parseFloat(s.games?.rating)
   const apps = s.games?.appearences || 0
@@ -66,7 +66,7 @@ export function mapEntry(s) {
   }
 }
 
-// Cộng dồn các dòng -> dòng TỔNG (rating & pass%: trung bình có trọng số theo số trận).
+// Sum the rows -> a TOTAL row (rating & pass%: weighted average by appearances).
 export function totalsOf(rows) {
   const sum = (k) => rows.reduce((t, r) => t + (r[k] || 0), 0)
   let rW = 0, rA = 0   // rating
@@ -84,22 +84,22 @@ export function totalsOf(rows) {
   }
 }
 
-// Tách 1 object cầu thủ ({ player, statistics }) thành { club, national }
-// (đã bỏ giao hữu). Dùng cho trang hồ sơ hiển thị 2 bảng riêng.
+// Split a player object ({ player, statistics }) into { club, national }
+// (friendlies already removed). Used by the profile page to show two separate tables.
 export function splitStats(p) {
   const arr = p?.statistics || []
   const nat = p?.player?.nationality
   const club = [], national = []
   for (const s of arr) {
-    if (isFriendly(s)) continue            // bỏ giao hữu khỏi mọi bảng
+    if (isFriendly(s)) continue            // remove friendlies from every table
     ;(isNational(s, nat) ? national : club).push(mapEntry(s))
   }
   const byApps = (a, b) => b.apps - a.apps
   return { club: club.sort(byApps), national: national.sort(byApps) }
 }
 
-// Tổng CHÍNH THỨC = CLB + ĐTQG, ĐÃ loại giao hữu. Dùng cho trang so sánh
-// để con số nhất quán với cách phân loại ở trang hồ sơ.
+// OFFICIAL total = club + national team, friendlies EXCLUDED. Used by the compare page
+// so the number is consistent with the classification on the profile page.
 export function aggregateOfficial(p) {
   const { club, national } = splitStats(p)
   const rows = [...club, ...national]

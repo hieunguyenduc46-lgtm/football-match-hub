@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { t } from '../i18n'
 import { teamName } from '../utils/countryNames'
 
-// data = object dự đoán API trả về (predictions + comparison + teams). {} nếu không có.
+// data = the prediction object returned by the API (predictions + comparison + teams). {} if none.
 const props = defineProps({
   data: { type: Object, default: () => ({}) },
   home: { type: Object, default: () => ({}) },
@@ -12,16 +12,16 @@ const props = defineProps({
 
 const pred = computed(() => props.data?.predictions || null)
 
-// "45%" -> 45 (số). Lỗi/thiếu -> 0.
+// "45%" -> 45 (number). Error/missing -> 0.
 function pct(v) {
   const n = parseInt(String(v ?? '').replace('%', ''), 10)
   return Number.isNaN(n) ? 0 : n
 }
 
-// Xác suất Thắng/Hòa/Thua.
-// API trả `percent` khá THÔ cho trận ít dữ liệu (hay gom về 10/45/45...). Ta tính lại từ
-// `comparison` (phong độ/tấn công/phòng thủ/poisson/đối đầu — các số này MỊN và thật hơn)
-// để ra con số sát thực tế hơn. Không có comparison -> mới dùng percent gốc của API.
+// Win/Draw/Loss probabilities.
+// The API's `percent` is quite COARSE for matches with little data (often 10/45/45...). We recalculate from
+// `comparison` (form/attack/defence/poisson/h2h; these numbers are SMOOTHER and more realistic)
+// to get a more accurate figure. Without comparison -> fall back to the API's original percent.
 const percent = computed(() => {
   const c = props.data?.comparison || {}
   const fields = ['form', 'att', 'def', 'poisson_distribution', 'h2h', 'total']
@@ -32,16 +32,16 @@ const percent = computed(() => {
       hs += pct(cell.home); as += pct(cell.away); n++
     }
   }
-  // Không có ô so sánh, HOẶC mọi ô đều 0% (trận mô phỏng/chưa có dữ liệu) -> dùng số gốc API.
-  // (Nếu vẫn chia khi tổng = 0 sẽ ra số vô lý kiểu 0/30/70 dù đội đó thắng.)
+  // No comparison fields, OR every field is 0% (simulated match/no data yet) -> use the API's original numbers.
+  // (Dividing when the total is 0 would give nonsense like 0/30/70 even if that team won.)
   if (n === 0 || hs + as === 0) {
     const p = pred.value?.percent || {}
     return { home: pct(p.home), draw: pct(p.draw), away: pct(p.away) }
   }
   const total = hs + as
-  const h = hs / total, a = as / total            // tỉ trọng sức mạnh 2 đội (cộng = 1)
+  const h = hs / total, a = as / total            // relative strength of the two teams (sums to 1)
   const diff = Math.abs(h - a)
-  let draw = Math.round(30 * (1 - diff))           // hòa CAO khi cân tài (tối đa ~30%), thấp khi lệch
+  let draw = Math.round(30 * (1 - diff))           // draw is HIGHER when evenly matched (up to ~30%), lower when unbalanced
   if (draw < 5) draw = 5
   const rem = 100 - draw
   let home = Math.round(rem * h)
@@ -52,7 +52,7 @@ const percent = computed(() => {
 
 const advice = computed(() => pred.value?.advice || '')
 
-// Các hàng so sánh 2 đội (mỗi giá trị là "x%"). Bỏ hàng nào API không có.
+// Comparison rows for the two teams (each value is "x%"). Skip rows the API does not provide.
 const rows = computed(() => {
   const c = props.data?.comparison || {}
   const meta = [
@@ -64,14 +64,14 @@ const rows = computed(() => {
   return meta
     .filter((m) => c[m.key] && (c[m.key].home != null || c[m.key].away != null))
     .map((m) => ({ label: m.label, home: pct(c[m.key].home), away: pct(c[m.key].away) }))
-    .filter((r) => r.home || r.away)   // bỏ hàng 0%/0% (không có dữ liệu thật) cho gọn
+    .filter((r) => r.home || r.away)   // skip 0%/0% rows (no real data) to keep it tidy
 })
 </script>
 
 <template>
   <div v-if="!pred" class="center">{{ $t('noPrediction') }}</div>
   <div v-else class="pred">
-    <!-- Thanh xác suất Thắng / Hòa / Thua -->
+    <!-- Win / Draw / Loss probability bar -->
     <div class="pred-bar">
       <span class="seg home" :style="{ width: percent.home + '%' }"></span>
       <span class="seg draw" :style="{ width: percent.draw + '%' }"></span>
@@ -92,12 +92,12 @@ const rows = computed(() => {
       </div>
     </div>
 
-    <!-- Lời khuyên -->
+    <!-- Advice -->
     <div v-if="advice" class="pred-advice">
       <span class="muted">{{ $t('predAdvice') }}:</span> {{ advice }}
     </div>
 
-    <!-- So sánh phong độ / tấn công / phòng thủ / đối đầu -->
+    <!-- Form / attack / defence / head-to-head comparison -->
     <div v-if="rows.length" class="pred-compare">
       <div class="pc-title muted">{{ $t('predCompare') }}</div>
       <div v-for="r in rows" :key="r.label" class="pc-row">

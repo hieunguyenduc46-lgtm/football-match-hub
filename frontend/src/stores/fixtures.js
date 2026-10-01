@@ -1,24 +1,24 @@
 import { defineStore } from 'pinia'
 import api from '../services/api'
 
-// Store giữ danh sách trận + trạng thái loading/error.
-// Logic: gọi backend 1 lần, rồi lọc theo tab ở phía giao diện (HomeView).
+// Store holding the fixture list + loading/error state.
+// Logic: call the backend once, then filter by tab on the UI side (HomeView).
 export const useFixturesStore = defineStore('fixtures', {
   state: () => ({
     fixtures: [],
     loading: false,
     error: null,
-    _seq: 0,            // chống race: chỉ nhận kết quả của lần gọi mới nhất
+    _seq: 0,            // prevent race conditions: only accept results from the latest call
   }),
   actions: {
-    // opts.silent = true: làm mới ngầm (auto-refresh) không hiện skeleton.
+    // opts.silent = true: background refresh (auto-refresh) without showing the skeleton.
     async fetchFixtures(params = {}, opts = {}) {
       const seq = ++this._seq
       if (!opts.silent) this.loading = true
       this.error = null
       try {
         const { data } = await api.get('/fixtures', { params })
-        if (seq !== this._seq) return        // đã đổi ngày/giải -> bỏ kết quả cũ
+        if (seq !== this._seq) return        // date/league changed -> discard old results
         this.fixtures = data.response || []
       } catch (e) {
         if (seq !== this._seq) return

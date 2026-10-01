@@ -4,7 +4,7 @@ import { t } from '../i18n'
 
 const props = defineProps({ stats: { type: Array, required: true } })
 
-// Map loại chỉ số (API) -> khoá i18n.
+// Map statistic type (API) -> i18n key.
 const KEY = {
   'Ball Possession': 'stat_possession',
   'Total Shots': 'stat_shots',
@@ -33,10 +33,10 @@ function num(v) {
   return parseFloat(String(v).replace('%', '')) || 0
 }
 
-// Ghép từng chỉ số: nhãn + giá trị 2 đội + % bề rộng thanh của đội nhà.
+// Build each statistic: label + both teams' values + home team's bar width in %.
 const rows = computed(() => {
   if (!home.value || !away.value) return []
-  const hs = home.value.statistics || []   // API có thể thiếu mảng statistics
+  const hs = home.value.statistics || []   // The API may be missing the statistics array
   const as = away.value.statistics || []
   return hs.map((s, i) => {
     const av = as[i] || {}

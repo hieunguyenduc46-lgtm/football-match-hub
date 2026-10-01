@@ -48,7 +48,7 @@ const { teams, players, leagues, matches } = storeToRefs(fav)
       </router-link>
     </template>
 
-    <!-- Giải đã follow -->
+    <!-- Followed leagues -->
     <template v-if="leagues.length">
       <h2 class="page-title" style="font-size:16px">{{ $t('leaguesLabel') }} ({{ leagues.length }})</h2>
       <router-link
@@ -64,7 +64,7 @@ const { teams, players, leagues, matches } = storeToRefs(fav)
       </router-link>
     </template>
 
-    <!-- Trận đã follow -->
+    <!-- Followed matches -->
     <template v-if="matches.length">
       <h2 class="page-title" style="font-size:16px">{{ $t('matchesLabel') }} ({{ matches.length }})</h2>
       <router-link

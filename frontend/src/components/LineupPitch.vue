@@ -4,30 +4,30 @@ import { useRouter } from 'vue-router'
 import { imgFallback, playerPhoto } from '../utils/format'
 import { teamName } from '../utils/countryNames'
 
-// Nhận mảng lineups (2 đội) đúng shape API-Football.
+// Takes the lineups array (2 teams) in API-Football's shape.
 const props = defineProps({ lineups: { type: Array, required: true } })
 const router = useRouter()
 
 const home = computed(() => props.lineups[0] || null)
 const away = computed(() => props.lineups[1] || null)
 
-// Có dữ liệu đội hình thật để hiển thị không (đá chính HOẶC dự bị) -> nếu không thì
-// hiện "chưa có đội hình" thay vì sân trống.
+// Is there real line-up data to show (starters OR substitutes) -> if not,
+// show 'no line-up yet' instead of an empty pitch.
 const hasData = computed(() => {
   const n = (t) => (t?.startXI?.length || 0) + (t?.substitutes?.length || 0)
   return n(home.value) + n(away.value) > 0
 })
 
-// Tính toạ độ % cho từng cầu thủ dựa trên grid "row:col".
-// row 1 = thủ môn -> row lớn = tiền đạo. Nhà ở nửa dưới, khách nửa trên (lật ngược).
+// Calculate % coordinates for each player from the "row:col" grid.
+// row 1 = goalkeeper -> higher row = forwards. Home team in the bottom half, away team in the top half (flipped).
 function positioned(team, side) {
-  // API đôi khi trả lineup THIẾU startXI (vd trận giao hữu / hạng thấp) -> phải bọc
-  // để không 'startXI is not iterable' làm crash cả trang.
+  // The API sometimes returns a line-up WITHOUT startXI (e.g. friendlies / lower leagues) -> guard against it
+  // so 'startXI is not iterable' does not crash the whole page.
   if (!team || !Array.isArray(team.startXI)) return []
   const players = team.startXI.filter((e) => e && e.player).map((e) => e.player)
-  // API đôi khi KHÔNG trả 'grid' (giao hữu / hạng thấp) -> mọi cầu thủ về '1:1' và
-  // dồn chung 1 hàng -> chồng đè nhau. Nếu thiếu grid thì tự xếp: thủ môn 1 hàng,
-  // còn lại mỗi hàng tối đa 4 -> không bị ríu vào nhau.
+  // The API sometimes does NOT return 'grid' (friendlies / lower leagues) -> every player becomes '1:1' and
+  // they all stack on one row. If the grid is missing, lay them out ourselves: goalkeeper on one row,
+  // the rest at most 4 per row -> no overlapping.
   const hasGrid = players.some((p) => p.grid && p.grid.includes(':'))
   const byRow = {}
   if (hasGrid) {
@@ -53,7 +53,7 @@ function positioned(team, side) {
     const k = players.length
     players.forEach((p, i) => {
       const x = ((i + 1) / (k + 1)) * 100
-      const t = nRows === 1 ? 0 : (r - 1) / (nRows - 1) // 0 = GK, 1 = tiền đạo
+      const t = nRows === 1 ? 0 : (r - 1) / (nRows - 1) // 0 = GK, 1 = forward
       const y = side === 'home' ? 96 - t * 40 : 4 + t * 40
       out.push({ ...p, x, y })
     })
@@ -72,7 +72,7 @@ function goPlayer(id) {
 <template>
   <div v-if="hasData">
     <div class="pitch">
-      <!-- vạch sân -->
+      <!-- pitch markings -->
       <div class="pitch__line"></div>
       <div class="pitch__circle"></div>
       <div class="pitch__box pitch__box--top"></div>
@@ -85,13 +85,13 @@ function goPlayer(id) {
         {{ teamName(home.team?.name) }}<span v-if="home.formation"> · {{ home.formation }}</span> <img loading="lazy" :src="home.team?.logo" @error="imgFallback" />
       </div>
 
-      <!-- cầu thủ khách (trên) -->
+      <!-- away players (top) -->
       <div v-for="p in awayPlayers" :key="'a' + p.id" class="pp" :style="{ left: p.x + '%', top: p.y + '%' }" @click="goPlayer(p.id)">
         <img loading="lazy" :src="playerPhoto(p)" @error="imgFallback" />
         <span class="num">{{ p.number }}</span>
         <span class="nm">{{ p.name }}</span>
       </div>
-      <!-- cầu thủ nhà (dưới) -->
+      <!-- home players (bottom) -->
       <div v-for="p in homePlayers" :key="'h' + p.id" class="pp" :style="{ left: p.x + '%', top: p.y + '%' }" @click="goPlayer(p.id)">
         <img loading="lazy" :src="playerPhoto(p)" @error="imgFallback" />
         <span class="num">{{ p.number }}</span>
@@ -99,7 +99,7 @@ function goPlayer(id) {
       </div>
     </div>
 
-    <!-- ghế dự bị + HLV -->
+    <!-- substitutes' bench + coach -->
     <div class="subs-wrap">
       <div v-for="(t, idx) in lineups" :key="idx" class="subs-col">
         <div class="subs-title"><img loading="lazy" :src="t.team?.logo" @error="imgFallback" /> {{ $t('subs') }}</div>
@@ -159,8 +159,8 @@ function goPlayer(id) {
 .sub-row { font-size: 13px; padding: 3px 0; cursor: pointer; }
 .sub-row:hover { color: var(--accent-2); }
 
-/* Điện thoại: thu nhỏ cầu thủ + tên để 4-5 người/hàng không bị đè lên nhau,
-   và xếp 2 cột dự bị thành 1 cột cho dễ đọc. */
+/* Mobile: shrink players + names so 4-5 per row do not overlap,
+   and stack the 2 substitute columns into 1 column for readability. */
 @media (max-width: 560px) {
   .pp { width: 44px; }
   .pp img { width: 28px; height: 28px; }

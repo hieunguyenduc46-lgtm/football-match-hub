@@ -11,26 +11,26 @@ router = APIRouter(prefix="/api", tags=["fixtures"])
 @router.get("/fixtures")
 async def list_fixtures(date: Optional[str] = None, league: Optional[int] = None,
                         season: Optional[int] = None, tz: Optional[str] = None):
-    """Danh sách trận. Lọc theo ?date=YYYY-MM-DD, ?league=, ?season=, ?tz=múi-giờ.
+    """Fixture list. Filter by ?date=YYYY-MM-DD, ?league=, ?season=, ?tz=timezone.
 
-    API-Football: lọc theo league BẮT BUỘC kèm season. Nếu chưa có season,
-    tự suy từ ngày (mùa bóng châu Âu: tháng >= 7 thuộc mùa năm đó, nhỏ hơn = năm trước).
-    tz = múi giờ người xem -> API trả ngày & giờ theo đúng giờ địa phương của họ.
+    API-Football: filtering by league REQUIRES a season. If no season is given,
+    infer it from the date (European season: month >= 7 belongs to that year's season, earlier = previous year).
+    tz = viewer's timezone -> the API returns dates and times in their local time.
     """
     if league and not season:
-        # Suy season từ ngày; date sai định dạng (vd "abc") thì rơi về season mặc định
-        # thay vì ném ValueError -> tránh trả 500 cho người gọi.
+        # Infer the season from the date; an invalid date (e.g. "abc") falls back to the default season
+        # instead of raising ValueError -> avoids returning a 500 to the caller.
         try:
             if league in LEAGUE_SEASON:
-                # Giải đặc biệt (World Cup 2026, ...): mùa GHIM cứng, KHÔNG suy theo tháng.
-                # (Trước đây WC ngày 13/6 bị suy thành 2025 -> lọc ra rỗng dù có trận.)
+                # Special competitions (World Cup 2026, ...): the season is PINNED, NOT inferred from the month.
+                # (Previously the World Cup on 13/6 was inferred as 2025 -> the filter returned nothing even though there were matches.)
                 season = LEAGUE_SEASON[league]
             elif date and len(date) >= 7:
                 y, m = int(date[:4]), int(date[5:7])
                 if league in CALENDAR_YEAR_LEAGUES:
-                    season = y                       # giải năm dương lịch: dùng đúng năm
+                    season = y                       # calendar-year league: use the exact year
                 else:
-                    season = y if m >= 7 else y - 1  # giải châu Âu: mùa vắt 2 năm
+                    season = y if m >= 7 else y - 1  # European league: season spans 2 years
             else:
                 season = default_season()
         except (TypeError, ValueError):
@@ -40,33 +40,33 @@ async def list_fixtures(date: Optional[str] = None, league: Optional[int] = None
 
 @router.get("/leagues/{league_id}/fixtures")
 async def league_fixtures(league_id: int, season: Optional[int] = None):
-    """Trận gần đây (kết quả) + sắp tới của 1 giải. Cho tab 'Lịch đấu' ở trang giải.
-    season: lấy theo mùa đang chọn; không truyền -> trận mới nhất (live)."""
+    """Recent (results) + upcoming fixtures of a league. For the 'Fixtures' tab on the league page.
+    season: use the selected season; if not given -> latest matches (live)."""
     return await api_football.get_league_fixtures(league_id, season=season)
 
 
 @router.get("/country/{name}/fixtures")
 async def country_fixtures(name: str):
-    """Trận gần đây + sắp tới của đội tuyển quốc gia (chấp nhận tên tiếng Việt)."""
+    """Recent + upcoming matches of a national team (Vietnamese names accepted)."""
     return await api_football.get_country_fixtures(name)
 
 
 @router.get("/leagues/{league_id}/bracket")
 async def league_bracket(league_id: int, season: Optional[int] = None):
-    """Các trận vòng knockout của giải -> client dựng sơ đồ nhánh đấu. [] nếu không có.
-    season: mùa muốn xem (không truyền -> mùa mặc định theo giải)."""
+    """Knockout matches of a competition -> the client builds the bracket diagram. [] if none.
+    season: the season to view (if not given -> the league's default season)."""
     return {"response": await api_football.get_bracket(league_id, season)}
 
 
 @router.get("/leagues/{league_id}/seasons")
 async def league_seasons(league_id: int):
-    """Danh sách mùa giải có dữ liệu (cho ô chọn mùa ở trang giải)."""
+    """Seasons that have data (for the season dropdown on the league page)."""
     return {"response": await api_football.get_league_seasons(league_id)}
 
 
 @router.get("/_debug/fixtures")
 async def debug_fixtures(date: Optional[str] = None, league: Optional[int] = None, season: Optional[int] = None):
-    """Xem nguyên văn API trả về (để chẩn lỗi). CHỈ chạy khi DEBUG=true; prod trả 404."""
+    """Show the raw API output (for debugging). ONLY runs when DEBUG=true; returns 404 in production."""
     if not settings.debug:
         raise HTTPException(status_code=404, detail="Not found")
     params = {}
@@ -84,41 +84,41 @@ async def debug_fixtures(date: Optional[str] = None, league: Optional[int] = Non
 
 @router.get("/fixtures/{fixture_id}")
 async def fixture_detail(fixture_id: int):
-    """Chi tiết 1 trận theo id."""
+    """Details of one match by id."""
     return {"response": await api_football.get_fixture(fixture_id)}
 
 
 @router.get("/fixtures/{fixture_id}/lineups")
 async def fixture_lineups(fixture_id: int):
-    """Đội hình ra sân 2 đội (formation + vị trí grid)."""
+    """Starting line-ups of both teams (formation + grid positions)."""
     return {"response": await api_football.get_lineups(fixture_id)}
 
 
 @router.get("/fixtures/{fixture_id}/events")
 async def fixture_events(fixture_id: int):
-    """Sự kiện trận: bàn thắng / thẻ / thay người theo phút."""
+    """Match events: goals / cards / substitutions by minute."""
     return {"response": await api_football.get_events(fixture_id)}
 
 
 @router.get("/fixtures/{fixture_id}/statistics")
 async def fixture_statistics(fixture_id: int):
-    """Thống kê trận: kiểm soát bóng, dứt điểm, xG..."""
+    """Match statistics: possession, shots, xG..."""
     return {"response": await api_football.get_statistics(fixture_id)}
 
 
 @router.get("/fixtures/{fixture_id}/players")
 async def fixture_players(fixture_id: int):
-    """Chấm điểm cầu thủ sau trận (rating)."""
+    """Post-match player ratings."""
     return {"response": await api_football.get_fixture_players(fixture_id)}
 
 
 @router.get("/fixtures/{fixture_id}/h2h")
 async def fixture_h2h(fixture_id: int, home: int = 0, away: int = 0):
-    """Lịch sử đối đầu 2 đội của trận này."""
+    """Head-to-head history of the two teams in this match."""
     return {"response": await api_football.get_h2h(fixture_id, home, away)}
 
 
 @router.get("/fixtures/{fixture_id}/predictions")
 async def fixture_predictions(fixture_id: int):
-    """Dự đoán trận: xác suất thắng/hòa/thua + lời khuyên + so sánh phong độ. {} nếu không có."""
+    """Match prediction: win/draw/loss probabilities + advice + form comparison. {} if none."""
     return {"response": await api_football.get_predictions(fixture_id)}

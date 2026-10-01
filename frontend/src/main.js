@@ -6,22 +6,22 @@ import { t } from './i18n'
 import { inject as vercelAnalytics } from '@vercel/analytics'
 import './assets/main.css'
 
-// Theme: đọc lựa chọn đã lưu và set TRƯỚC khi render để không bị chớp màu.
+// Theme: read the saved choice and apply it BEFORE rendering to avoid a colour flash.
 const savedTheme = (() => { try { return localStorage.getItem('theme') } catch (e) { return null } })()
 document.documentElement.setAttribute('data-theme', savedTheme || 'dark')
 
 const app = createApp(App)
-app.config.globalProperties.$t = t // dùng $t('key') trong mọi template
+app.config.globalProperties.$t = t // use $t('key') in every template
 app.use(createPinia()).use(router).mount('#app')
 
-// Vercel Web Analytics: đếm lượt truy cập / lượt xem trang (ẩn danh).
-// Tự bám theo điều hướng SPA. Ở local script trả 404 -> vô hại; chỉ chạy thật trên Vercel.
-// Bọc try/catch để analytics TUYỆT ĐỐI không bao giờ làm ảnh hưởng app (chạy SAU mount).
-try { vercelAnalytics() } catch (e) { /* bỏ qua, không để analytics phá app */ }
+// Vercel Web Analytics: counts visits / page views (anonymous).
+// Follows SPA navigation automatically. Locally the script returns 404 -> harmless; it only really runs on Vercel.
+// Wrapped in try/catch so analytics can NEVER affect the app (runs AFTER mount).
+try { vercelAnalytics() } catch (e) { /* ignore, do not let analytics break the app */ }
 
-// PWA: chỉ đăng ký service worker ở bản production (tránh phá HMR khi dev).
+// PWA: only register the service worker in the production build (avoids breaking HMR in development).
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => { /* bỏ qua */ })
+    navigator.serviceWorker.register('/sw.js').catch(() => { /* ignore */ })
   })
 }

@@ -12,30 +12,30 @@ function toggleLang() {
   setLocale(state.locale === 'vi' ? 'en' : 'vi')
 }
 
-// ---- Tìm kiếm ----
+// ---- Search ----
 const q = ref('')
 const results = ref({ teams: [], players: [] })
 const open = ref(false)
 const searching = ref(false)
 let timer = null
-let reqSeq = 0   // chống "race": chỉ nhận kết quả của lần gọi MỚI nhất
+let reqSeq = 0   // prevent race conditions: only accept results from the LATEST call
 
-// Truy vấn đủ dài để hiện ô gợi ý (ít nhất luôn có hành động "Tìm trận").
+// Query is long enough to show the suggestion box (there is always at least the 'Find match' action).
 const canSearch = computed(() => q.value.trim().length >= 2)
 
-// Bỏ dấu + thường hoá để so khớp tên ("Mbappé" ~ "mbappe").
+// Remove accents + lowercase to compare names ("Mbappé" ~ "mbappe").
 function norm(s) {
   return (s || '').toLowerCase().normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
 }
 
-// Gọi API tìm kiếm, trả kết quả; tự bỏ qua nếu đã có lần gọi mới hơn.
+// Call the search API and return results; ignored automatically if a newer call exists.
 async function fetchSearch(term) {
   const seq = ++reqSeq
   searching.value = true
   try {
     const { data } = await api.get('/search', { params: { q: term } })
-    if (seq !== reqSeq) return null            // có lần gõ mới hơn -> bỏ kết quả cũ
+    if (seq !== reqSeq) return null            // a newer keystroke exists -> discard old results
     const r = { teams: data.teams || [], players: data.players || [] }
     results.value = r
     return r
@@ -56,12 +56,12 @@ watch(q, (val) => {
     searching.value = false
     return
   }
-  open.value = true // luôn hiện dropdown để thấy nút "Tìm trận"
+  open.value = true // always show the dropdown so the 'Find match' button is visible
   if (term.length < 3) {
     results.value = { teams: [], players: [] }
     return
   }
-  // debounce 250ms + tối thiểu 3 ký tự để đỡ gọi API khi đang gõ (tiết kiệm quota).
+  // 250ms debounce + minimum 3 characters to reduce API calls while typing (saves quota).
   timer = setTimeout(() => fetchSearch(term), 250)
 })
 
@@ -70,7 +70,7 @@ function hasResults() {
 }
 function goTeam(id) { reset(); router.push({ name: 'team', params: { id } }) }
 function goPlayer(id) { reset(); router.push({ name: 'player', params: { id } }) }
-// Tìm trận đấu: gõ "A vs B" hoặc 1 đội -> trang /matches.
+// Match search: type "A vs B" or one team -> /matches page.
 function goMatches() {
   const term = q.value.trim()
   if (term.length < 2) return
@@ -78,16 +78,16 @@ function goMatches() {
   router.push({ name: 'matches', query: { q: term } })
 }
 
-// Enter: ƯU TIÊN mở đúng thực thể (cầu thủ/đội), chỉ tìm TRẬN khi gõ kiểu "A vs B"
-// hoặc không có kết quả nào. Nếu kết quả chưa kịp về (debounce) thì gọi NGAY rồi mới quyết.
+// Enter: PREFER opening the exact entity (player/team); only search MATCHES when the input looks like "A vs B"
+// or there are no results. If results have not arrived yet (debounce), call IMMEDIATELY and then decide.
 async function onEnter() {
   const term = q.value.trim()
   if (term.length < 2) return
-  // "A vs B" / "A v B" -> tìm trận đối đầu.
+  // "A vs B" / "A v B" -> head-to-head match search.
   if (/\s+vs?\s+/i.test(term)) return goMatches()
   clearTimeout(timer)
   let r = results.value
-  // Chưa có kết quả khớp từ khoá hiện tại -> gọi ngay, đừng đợi.
+  // No results for the current keyword yet -> call now, do not wait.
   if (term.length >= 3 && !hasResults()) {
     r = (await fetchSearch(term)) || results.value
   }
@@ -98,18 +98,18 @@ async function onEnter() {
   if (exactT) return goTeam(exactT.id)
   if (r.players.length) return goPlayer(r.players[0].id)
   if (r.teams.length) return goTeam(r.teams[0].id)
-  goMatches()   // không có thực thể nào -> thử như tìm trận
+  goMatches()   // no entity found -> try it as a match search
 }
 
 function reset() { open.value = false; q.value = ''; searching.value = false }
-function onBlur() { setTimeout(() => { open.value = false }, 200) } // chờ click item
+function onBlur() { setTimeout(() => { open.value = false }, 200) } // wait for an item click
 
 // ---- Dark / Light ----
 const theme = ref(document.documentElement.getAttribute('data-theme') || 'dark')
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
   document.documentElement.setAttribute('data-theme', theme.value)
-  try { localStorage.setItem('theme', theme.value) } catch (e) { /* bỏ qua */ }
+  try { localStorage.setItem('theme', theme.value) } catch (e) { /* ignore */ }
 }
 </script>
 
@@ -129,9 +129,9 @@ function toggleTheme() {
           @keyup.enter="onEnter"
         />
         <div v-if="open" class="search-dd">
-          <!-- Tìm trận đấu: luôn ở đầu khi có từ khoá -->
-          <!-- Dùng pointerdown (chạy cả chuột lẫn cảm ứng) để bấm được trên điện thoại,
-               tránh việc input mất focus -> dropdown đóng trước khi 'click' kịp chạy. -->
+          <!-- Match search: always at the top when there is a keyword -->
+          <!-- Use pointerdown (works for both mouse and touch) so it can be tapped on mobile,
+               avoiding the input losing focus -> the dropdown closing before 'click' fires. -->
           <div v-if="canSearch" class="dd-item dd-action" @pointerdown.prevent="goMatches">
             ⚽ {{ $t('findMatches') }}: <strong style="margin-left:4px">{{ q.trim() }}</strong>
           </div>
@@ -147,7 +147,7 @@ function toggleTheme() {
               <img loading="lazy" :src="p.photo" @error="imgFallback" class="round" /> {{ p.name }}
             </div>
           </template>
-          <!-- Trạng thái: đang tìm / không có gợi ý -->
+          <!-- Status: searching / no suggestions -->
           <div v-if="searching" class="dd-hint">{{ $t('searching') }}</div>
           <div v-else-if="q.trim().length >= 3 && !hasResults()" class="dd-hint">{{ $t('noResults') }}</div>
         </div>

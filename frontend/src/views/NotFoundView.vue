@@ -1,6 +1,6 @@
 <script setup>
-// Trang 404: hiện khi vào URL không khớp route nào (gõ sai, link cũ/chết, link PWA cũ).
-// Route bắt-tất-cả ('/:pathMatch(.*)*') ở cuối router/index.js trỏ tới đây.
+// 404 page: shown for a URL that matches no route (typo, old/dead link, old PWA link).
+// The catch-all route ('/:pathMatch(.*)*') at the end of router/index.js points here.
 import { onMounted } from 'vue'
 import { setTitle } from '../utils/title'
 import { t } from '../i18n'

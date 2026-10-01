@@ -12,13 +12,13 @@ const q = ref('')
 const open = ref(false)
 const ready = ref(false)
 const results = ref({ leagues: [], countries: [] })
-const active = ref(-1) // chỉ số trong danh sách phẳng (quốc gia trước, giải sau)
+const active = ref(-1) // index in the flat list (countries first, then leagues)
 const boxRef = ref(null)
 
-// Tải chỉ mục 1 lần khi gắn component (không chặn gõ — gõ trước khi tải xong vẫn ổn).
+// Load the index once when the component mounts (does not block typing; typing before it loads is fine).
 onMounted(async () => { ready.value = await ensureIndex() })
 
-// Debounce nhẹ 110ms: tránh tính/lọc lại liên tục khi gõ nhanh (dù lọc client rất nhanh).
+// Light 110ms debounce: avoids re-filtering constantly while typing fast (even though client filtering is very fast).
 let timer = null
 function onInput() {
   clearTimeout(timer)
@@ -29,7 +29,7 @@ function onInput() {
   }, 110)
 }
 
-// Gộp thành 1 danh sách phẳng để điều hướng bằng phím mũi tên.
+// Merge into one flat list for arrow-key navigation.
 const flat = computed(() => [
   ...results.value.countries.map((c) => ({ type: 'country', data: c })),
   ...results.value.leagues.map((l) => ({ type: 'league', data: l })),
@@ -37,10 +37,10 @@ const flat = computed(() => [
 const hasResults = computed(() => flat.value.length > 0)
 const nc = computed(() => results.value.countries.length)
 
-// ----- Tìm trận "A vs B" -----
-// Cùng bộ ngăn cách như backend (_VS_RE): vs / versus / v / x / - / – / "đấu với" / "gặp".
+// ----- Search for a match "A vs B" -----
+// Same separators as the backend (_VS_RE): vs / versus / v / x / - / – / "đấu với" / "gặp" (Vietnamese for 'vs').
 const VS_RE = /\s+(?:vs|versus|v|x|-|–|đấu với|gặp)\s+/i
-// Nếu gõ đúng dạng "A <sep> B" (mỗi vế không rỗng) -> trả [A, B], ngược lại null.
+// If the input matches "A <sep> B" (both sides non-empty) -> return [A, B], otherwise null.
 const vsParts = computed(() => {
   const parts = q.value.split(VS_RE)
   if (parts.length === 2 && parts[0].trim() && parts[1].trim()) {
@@ -48,7 +48,7 @@ const vsParts = computed(() => {
   }
   return null
 })
-// Tên 1 vế: ưu tiên tên đội tuyển đã dịch (EN/VI), không khớp thì viết hoa chữ cái đầu.
+// Name of one side: prefer the translated national team name (EN/VI); otherwise capitalise the first letter.
 function sideLabel(term) {
   const c = resolveCountry(term)
   if (c) return state.locale === 'en' ? c.name : c.vi || c.name
@@ -59,8 +59,8 @@ const matchLabel = computed(() =>
 )
 const findMatchLabel = computed(() => t('findMatches'))
 
-// Mở trang đối đầu. Nếu cả 2 vế là đội tuyển -> gửi tên tiếng Anh chuẩn (chắc khớp);
-// còn lại gửi nguyên chuỗi để backend tự suy (xử lý được cả CLB lẫn tên tiếng Việt).
+// Open the head-to-head page. If both sides are national teams -> send the standard English names (guaranteed match);
+// otherwise send the raw string and let the backend work it out (handles both clubs and Vietnamese names).
 function goMatch() {
   if (!vsParts.value) return
   const ca = resolveCountry(vsParts.value[0])
@@ -93,7 +93,7 @@ function go(item) {
 
 function onKey(e) {
   if (e.key === 'Escape') { open.value = false; return }
-  // Gõ "A vs B" rồi Enter (chưa chọn mục nào trong danh sách) -> mở luôn trang đối đầu.
+  // Type "A vs B" and press Enter (with no item selected) -> open the head-to-head page directly.
   if (e.key === 'Enter' && vsParts.value && active.value < 0) {
     e.preventDefault(); goMatch(); return
   }
@@ -135,7 +135,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onClickOutside); c
     />
 
     <div class="search-dd" v-if="open && (vsParts || hasResults)">
-      <!-- Gợi ý tìm trận đối đầu "A vs B" (đội tuyển: tên đã dịch theo ngôn ngữ). -->
+      <!-- Suggest a head-to-head search "A vs B" (national teams: names translated to the current language). -->
       <div v-if="vsParts" class="dd-item dd-action" @pointerdown.prevent="goMatch">
         ⚽ {{ findMatchLabel }}: <strong style="margin-left:4px">{{ matchLabel }}</strong>
       </div>

@@ -1,9 +1,9 @@
-// Dịch loại chấn thương / lý do vắng mặt (API-Football trả tiếng Anh) sang tiếng Việt.
-// 3 lớp: (1) bảng dịch chính xác, (2) bộ phận cơ thể đứng một mình -> "Chấn thương <bp>",
-// (3) mẫu "<bp> Injury" / "Broken <bp>" / "<bp> Surgery". Không khớp -> giữ nguyên (an toàn).
+// Translate injury types / absence reasons (API-Football returns English) into Vietnamese.
+// 3 layers: (1) exact translation table, (2) a body part on its own -> 'Chấn thương <part>' (injury),
+// (3) patterns "<part> Injury" / "Broken <part>" / "<part> Surgery". No match -> keep unchanged (safe).
 import { state } from '../i18n'
 
-// Bộ phận cơ thể (khoá viết thường)
+// Body parts (lowercase keys)
 const PART_VI = {
   knee: 'đầu gối', ankle: 'cổ chân', foot: 'bàn chân', 'ankle/foot': 'cổ chân/bàn chân',
   thigh: 'đùi', hip: 'hông', 'hip/thigh': 'hông/đùi', hamstring: 'gân kheo',
@@ -21,7 +21,7 @@ const PART_VI = {
   meniscus: 'sụn chêm', cartilage: 'sụn', 'hip flexor': 'cơ gấp hông',
 }
 
-// Dịch chính xác (không theo mẫu bộ phận)
+// Exact translations (not based on body-part patterns)
 const INJURY_VI = {
   injury: 'Chấn thương', knock: 'Va chạm', illness: 'Ốm', sick: 'Ốm',
   virus: 'Nhiễm virus', flu: 'Cúm', fever: 'Sốt', infection: 'Nhiễm trùng',
@@ -33,13 +33,13 @@ const INJURY_VI = {
   'muscle injury': 'Chấn thương cơ', 'hamstring': 'Chấn thương gân kheo',
   fitness: 'Thể lực', 'lack of fitness': 'Chưa đủ thể lực', rest: 'Nghỉ dưỡng sức',
   unknown: 'Không rõ', 'knee surgery': 'Phẫu thuật đầu gối',
-  // treo giò / vắng mặt
+  // suspension / absence
   suspended: 'Treo giò', 'red card': 'Treo giò (thẻ đỏ)', 'yellow cards': 'Treo giò (thẻ vàng)',
   'coach decision': 'Quyết định của HLV', "coach's decision": 'Quyết định của HLV',
   'national selection': 'Tập trung đội tuyển', 'personal reasons': 'Lý do cá nhân',
   'personal problems': 'Vấn đề cá nhân', 'contract issues': 'Vấn đề hợp đồng',
   doping: 'Doping',
-  // type (trạng thái)
+  // type (status)
   'missing fixture': 'Vắng mặt', questionable: 'Chưa chắc chắn', doubtful: 'Chưa chắc ra sân',
   injured: 'Đang chấn thương', inactive: 'Không trong đội hình', out: 'Vắng mặt',
 }
@@ -49,11 +49,11 @@ export function injuryName(str) {
   if (state.locale !== 'vi') return str
   const s = String(str).trim()
   const low = s.toLowerCase()
-  // 1) khớp chính xác
+  // 1) exact match
   if (INJURY_VI[low]) return INJURY_VI[low]
-  // 2) bộ phận đứng một mình (vd "Hamstring", "Calf") -> "Chấn thương <bp>"
+  // 2) body part on its own (e.g. "Hamstring", "Calf") -> 'Chấn thương <part>' (injury)
   if (PART_VI[low]) return 'Chấn thương ' + PART_VI[low]
-  // 3) các mẫu
+  // 3) patterns
   if (low.endsWith(' injury')) {
     const part = low.slice(0, -7).trim()
     return 'Chấn thương ' + (PART_VI[part] || part)
@@ -74,6 +74,6 @@ export function injuryName(str) {
     const part = low.slice(0, -8).trim()
     return 'Bệnh ' + (PART_VI[part] || part)
   }
-  // 4) không khớp -> giữ nguyên (không bịa)
+  // 4) no match -> keep unchanged (never make things up)
   return s
 }

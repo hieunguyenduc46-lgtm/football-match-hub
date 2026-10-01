@@ -1,10 +1,10 @@
-// Tên quốc gia (đội tuyển) tiếng Anh -> tiếng Việt.
-// Chỉ dùng cho các đội TUYỂN QUỐC GIA. Tên CLB không nằm trong map nên
-// sẽ được trả về nguyên gốc -> không ảnh hưởng các giải CLB.
+// Country (national team) names English -> Vietnamese.
+// Only used for NATIONAL TEAMS. Club names are not in the map, so
+// they are returned unchanged -> club competitions are not affected.
 import { state } from '../i18n'
 
 export const COUNTRY_VI = {
-  // Châu Âu
+  // Europe
   'England': 'Anh',
   'Scotland': 'Scotland',
   'Wales': 'Wales',
@@ -63,7 +63,7 @@ export const COUNTRY_VI = {
   'Liechtenstein': 'Liechtenstein',
   'Faroe Islands': 'Quần đảo Faroe',
 
-  // Nam Mỹ
+  // South America
   'Brazil': 'Brazil',
   'Argentina': 'Argentina',
   'Uruguay': 'Uruguay',
@@ -75,7 +75,7 @@ export const COUNTRY_VI = {
   'Bolivia': 'Bolivia',
   'Venezuela': 'Venezuela',
 
-  // Bắc/Trung Mỹ
+  // North/Central America
   'United States': 'Mỹ',
   'USA': 'Mỹ',
   'Mexico': 'Mexico',
@@ -89,7 +89,7 @@ export const COUNTRY_VI = {
   'Haiti': 'Haiti',
   'Trinidad and Tobago': 'Trinidad và Tobago',
 
-  // Châu Phi
+  // Africa
   'Nigeria': 'Nigeria',
   'Senegal': 'Senegal',
   'Egypt': 'Ai Cập',
@@ -115,7 +115,7 @@ export const COUNTRY_VI = {
   'Mauritania': 'Mauritania',
   'Equatorial Guinea': 'Guinea Xích Đạo',
 
-  // Châu Á
+  // Asia
   'Japan': 'Nhật Bản',
   'South Korea': 'Hàn Quốc',
   'Korea Republic': 'Hàn Quốc',
@@ -156,17 +156,17 @@ export const COUNTRY_VI = {
   'Hong Kong': 'Hồng Kông',
   'Chinese Taipei': 'Đài Bắc Trung Hoa',
 
-  // Châu Đại Dương
+  // Oceania
   'New Zealand': 'New Zealand',
   'Fiji': 'Fiji',
 }
 
-// Hậu tố đội trẻ / đội nữ -> giữ nguyên khi dịch phần tên nước.
+// Youth / women's team suffixes -> kept as-is when translating the country part.
 const SUFFIX_RE = /\s+(U\d{2}|W|Women|Olympic|B)$/i
 
-// Trả về tên hiển thị theo ngôn ngữ hiện tại.
-// - locale 'en'  -> giữ nguyên tên gốc.
-// - locale 'vi'  -> dịch nếu có trong map, tách hậu tố U23/W... nếu cần.
+// Return the display name in the current language.
+// - locale 'en'  -> keep the original name.
+// - locale 'vi'  -> translate if it is in the map, splitting off U23/W... suffixes if needed.
 export function teamName(name) {
   if (!name || state.locale !== 'vi') return name
 

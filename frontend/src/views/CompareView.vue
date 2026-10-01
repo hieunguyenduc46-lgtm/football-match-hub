@@ -7,7 +7,7 @@ import { aggregateOfficial } from '../utils/playerStats'
 const qa = ref(''), resa = ref([]), pa = ref(null)
 const qb = ref(''), resb = ref([]), pb = ref(null)
 let ta = null, tb = null
-let seqA = 0, seqB = 0   // chống race: chỉ nhận kết quả của lần gõ mới nhất mỗi bên
+let seqA = 0, seqB = 0   // race guard: only accept the result of the latest keystroke on each side
 
 function onType(side) {
   const q = side === 'a' ? qa.value : qb.value
@@ -18,9 +18,9 @@ function onType(side) {
     const seq = side === 'a' ? ++seqA : ++seqB
     try {
       const { data } = await api.get('/search', { params: { q } })
-      if (seq !== (side === 'a' ? seqA : seqB)) return   // đã có lần gõ mới hơn
+      if (seq !== (side === 'a' ? seqA : seqB)) return   // a newer keystroke already exists
       resRef.value = data.players || []
-    } catch (e) { /* bỏ qua */ }
+    } catch (e) { /* ignore */ }
   }, 250)
   if (side === 'a') ta = t; else tb = t
 }
@@ -31,17 +31,17 @@ async function pick(side, id) {
     const p = data.response?.[0] || null
     if (side === 'a') { pa.value = p; resa.value = []; qa.value = '' }
     else { pb.value = p; resb.value = []; qb.value = '' }
-  } catch (e) { /* bỏ qua */ }
+  } catch (e) { /* ignore */ }
 }
 
-// Gộp số liệu giống HỆT trang hồ sơ: tổng CHÍNH THỨC = CLB + ĐTQG, loại giao hữu.
-// (Trước đây tự cộng mọi phần tử statistics kể cả giao hữu -> lệch với trang hồ sơ.)
+// Aggregate stats EXACTLY like the profile page: OFFICIAL total = club + national team, friendlies excluded.
+// (Previously summed every statistics entry including friendlies -> mismatched the profile page.)
 const rows = computed(() => {
   if (!pa.value || !pb.value) return []
   const sa = aggregateOfficial(pa.value), sb = aggregateOfficial(pb.value)
   if (!sa || !sb) return []
-  // Dùng KEY i18n thay cho chữ cứng -> đổi ngôn ngữ (VI/EN) nhãn cũng dịch theo.
-  // lower = true: chỉ số CÀNG ÍT càng tốt (vd thẻ vàng) -> đảo chiều khi tô "thắng".
+  // Use i18n KEYS instead of hard-coded text -> labels follow the language switch (VI/EN).
+  // lower = true: FEWER is better (e.g. yellow cards) -> invert when highlighting the "winner".
   return [
     { key: 'goals', a: sa.goals, b: sb.goals },
     { key: 'assists', a: sa.assists, b: sb.assists },
@@ -52,8 +52,8 @@ const rows = computed(() => {
   ]
 })
 
-// Bên nào "thắng" ở 1 hàng: mặc định nhiều hơn = thắng; hàng `lower` thì ít hơn = thắng.
-// Bằng nhau (hoặc thiếu số) -> không tô bên nào.
+// Which side "wins" a row: by default more = wins; for `lower` rows fewer = wins.
+// Equal (or missing number) -> highlight neither side.
 function winA(r) {
   if (r.a == null || r.b == null || r.a === r.b) return false
   return r.lower ? r.a < r.b : r.a > r.b

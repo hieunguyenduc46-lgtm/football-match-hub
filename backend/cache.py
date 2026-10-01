@@ -1,7 +1,7 @@
 """
-Cache TTL đơn giản trong bộ nhớ (in-memory).
-Mục đích: giảm số lần gọi API-Football để không vượt giới hạn free 100 req/ngày.
-Phase sau có thể thay bằng Redis mà không đổi interface.
+Simple in-memory TTL cache.
+Purpose: reduce API-Football calls to stay within the free limit of 100 requests/day.
+Can be replaced with Redis later without changing the interface.
 """
 import time
 from typing import Any, Optional
@@ -18,11 +18,11 @@ class TTLCache:
             return None
         expires_at, value = item
         if time.time() > expires_at:
-            self._store.pop(key, None)  # hết hạn -> xoá
+            self._store.pop(key, None)  # expired -> delete
             return None
         return value
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
-        # ttl riêng cho từng entry (vd live 30s, standings 6h). Không truyền -> dùng ttl mặc định.
+        # per-entry ttl (e.g. live 30s, standings 6h). If not given -> use the default ttl.
         effective = self.ttl if ttl is None else ttl
         self._store[key] = (time.time() + effective, value)

@@ -1,9 +1,9 @@
 """
-Dữ liệu mẫu mô phỏng ĐÚNG shape của API-Football (key "response").
-Nhờ giữ đúng shape, khi bạn cắm API key thật, frontend không phải sửa gì.
-Logo đội & ảnh cầu thủ dùng CDN công khai của api-sports nên hiển thị được luôn.
+Sample data that mimics the EXACT shape of API-Football ("response" key).
+Because the shape is identical, the frontend needs no changes when a real API key is added.
+Team logos and player photos use api-sports' public CDN, so they display straight away.
 
-Ngày các trận được tạo ĐỘNG quanh "hôm nay" để demo luôn có trận live/hôm nay/kết quả.
+Match dates are generated DYNAMICALLY around 'today' so the demo always has live/today/finished matches.
 """
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -13,7 +13,7 @@ def _iso(days: int, hour: int) -> str:
     d = datetime.now(timezone.utc) + timedelta(days=days)
     return d.replace(hour=hour, minute=0, second=0, microsecond=0).isoformat()
 
-# ---- Helpers tạo nhanh 1 trận ----
+# ---- Helpers to quickly create a match ----
 def _team(tid, name):
     return {"id": tid, "name": name, "logo": f"https://media.api-sports.io/football/teams/{tid}.png"}
 
@@ -51,7 +51,7 @@ MUN, LIV, MCI, ARS, CHE, TOT = (
     _team(42, "Arsenal"), _team(49, "Chelsea"), _team(47, "Tottenham"),
 )
 RMA, BAR = _team(541, "Real Madrid"), _team(529, "Barcelona")
-# Đội tuyển quốc gia (World Cup)
+# National teams (World Cup)
 ARG, BRA, FRA, ENG, ESP, POR = (
     _team(26, "Argentina"), _team(6, "Brazil"), _team(2, "France"),
     _team(10, "England"), _team(9, "Spain"), _team(27, "Portugal"),
@@ -103,7 +103,7 @@ def fixture_by_id(fixture_id: int) -> list:
     return [f for f in ALL_FIXTURES if f["fixture"]["id"] == fixture_id]
 
 
-# ---- Bảng xếp hạng (standings) ----
+# ---- Standings ----
 def _standing(rank, team, played, win, draw, lose, gf, ga, pts):
     return {
         "rank": rank, "team": team, "points": pts, "goalsDiff": gf - ga,
@@ -112,7 +112,7 @@ def _standing(rank, team, played, win, draw, lose, gf, ga, pts):
         "form": "WWDLW",
     }
 
-# Danh sách CLB / đội tuyển (id, tên) — logo lấy theo id từ CDN.
+# List of clubs / national teams (id, name); logos come from the CDN by id.
 PL_CLUBS = [
     (50, "Manchester City"), (42, "Arsenal"), (40, "Liverpool"), (33, "Manchester United"),
     (49, "Chelsea"), (47, "Tottenham"), (34, "Newcastle"), (66, "Aston Villa"),
@@ -129,7 +129,7 @@ LA_LIGA_CLUBS = [
 ]
 SAUDI_CLUBS = [(2932, "Al-Hilal"), (2939, "Al-Nassr"), (2929, "Al-Ittihad"), (2926, "Al-Ahli")]
 
-# 8 bảng World Cup, mỗi bảng 4 đội.
+# 8 World Cup groups, 4 teams each.
 WC_GROUPS = {
     "A": [(26, "Argentina"), (16, "Mexico"), (24, "Poland"), (23, "Saudi Arabia")],
     "B": [(2, "France"), (21, "Denmark"), (20, "Australia"), (2382, "Canada")],
@@ -143,7 +143,7 @@ WC_GROUPS = {
 
 
 def _full_table(league, clubs):
-    """BXH đầy đủ từ danh sách CLB (điểm giảm dần cho trông tự nhiên)."""
+    """Full standings from the club list (points decrease so it looks natural)."""
     rows = []
     for i, (tid, tname) in enumerate(clubs):
         w = max(3, 27 - i)
@@ -156,7 +156,7 @@ def _full_table(league, clubs):
 
 
 def _wc_table():
-    """BXH World Cup: 8 bảng riêng, mỗi hàng gắn tên Group."""
+    """World Cup standings: 8 separate groups, each row tagged with its Group name."""
     rec = [(2, 2, 0, 0, 5, 1), (2, 1, 1, 0, 4, 2), (2, 0, 1, 1, 2, 3), (2, 0, 0, 2, 1, 6)]
     groups = []
     for gname, teams in WC_GROUPS.items():
@@ -182,11 +182,11 @@ def standings_for(league: int) -> list:
     return STANDINGS_BY_LEAGUE.get(int(league), [])
 
 
-# ---- Registry cầu thủ (dùng chung cho squad / trang cầu thủ / top scorers) ----
+# ---- Player registry (shared by squads / player pages / top scorers) ----
 def _photo(pid):
     return f"https://media.api-sports.io/football/players/{pid}.png"
 
-# pid: (tên, số áo, vị trí, tuổi, quốc tịch, bàn, kiến tạo, số trận, phút, rating, team, league)
+# pid: (name, shirt number, position, age, nationality, goals, assists, apps, minutes, rating, team, league)
 PLAYER_DB = {
     # Liverpool
     306: ("Mohamed Salah", 11, "Attacker", 33, "Egypt", 21, 12, 36, 3100, "7.9", LIV, LEAGUE_PL),
@@ -221,7 +221,7 @@ PLAYER_DB = {
     521: ("Robert Lewandowski", 9, "Attacker", 37, "Poland", 20, 3, 35, 2900, "7.5", BAR, LEAGUE_LALIGA),
     47431: ("Lamine Yamal", 19, "Attacker", 18, "Spain", 9, 12, 34, 2600, "7.6", BAR, LEAGUE_LALIGA),
     1503: ("Pedri", 8, "Midfielder", 23, "Spain", 5, 6, 33, 2800, "7.4", BAR, LEAGUE_LALIGA),
-    # ===== World Cup (đội tuyển QG) =====
+    # ===== World Cup (national teams) =====
     154: ("Lionel Messi", 10, "Attacker", 38, "Argentina", 5, 4, 7, 600, "8.2", ARG, LEAGUE_WC),
     9301: ("Lautaro Martínez", 22, "Attacker", 28, "Argentina", 4, 1, 7, 540, "7.4", ARG, LEAGUE_WC),
     9302: ("Rodrygo", 10, "Attacker", 25, "Brazil", 3, 2, 6, 480, "7.3", BRA, LEAGUE_WC),
@@ -270,8 +270,8 @@ def player_by_id(player_id: int) -> list:
     }]
 
 
-# ---- Đội bóng + squad ----
-# team_id -> (tên, sân, thành phố, sức chứa, năm thành lập)
+# ---- Teams + squads ----
+# team_id -> (name, stadium, city, capacity, year founded)
 TEAM_META = {
     40: ("Liverpool", "Anfield", "Liverpool", 61276, 1892),
     33: ("Manchester United", "Old Trafford", "Manchester", 74310, 1878),
@@ -281,7 +281,7 @@ TEAM_META = {
     47: ("Tottenham", "Tottenham Hotspur Stadium", "London", 62850, 1882),
     541: ("Real Madrid", "Santiago Bernabéu", "Madrid", 81044, 1902),
     529: ("Barcelona", "Spotify Camp Nou", "Barcelona", 99354, 1899),
-    # Đội tuyển quốc gia
+    # National teams
     26: ("Argentina", "Estadio Monumental", "Buenos Aires", 83214, 1893),
     6: ("Brazil", "Maracanã", "Rio de Janeiro", 78838, 1914),
     2: ("France", "Stade de France", "Paris", 80698, 1919),
@@ -294,7 +294,7 @@ TEAM_META = {
     2929: ("Al-Ittihad", "King Abdullah Sports City", "Jeddah", 62345, 1927),
     2926: ("Al-Ahli", "King Abdullah Sports City", "Jeddah", 62345, 1937),
 }
-# squad = các pid trong PLAYER_DB thuộc đội đó
+# squad = the pids in PLAYER_DB that belong to that team
 SQUADS = {
     40: [306, 290, 283, 284],
     33: [909, 2935, 2934, 905],
@@ -304,7 +304,7 @@ SQUADS = {
     47: [186, 1505],
     541: [1102, 762, 730],
     529: [521, 47431, 1503],
-    # Đội tuyển
+    # National team
     26: [154, 9301],
     6: [9302, 9303],
     2: [278, 9304],
@@ -332,8 +332,8 @@ def team_by_id(team_id: int) -> list:
     }]
 
 
-# ---- Line-up (đội hình ra sân) ----
-# grid = "row:col": row 1 = thủ môn, tăng dần về phía tấn công; col = cột trong hàng.
+# ---- Line-ups (starting XI) ----
+# grid = "row:col": row 1 = goalkeeper, increasing towards attack; col = column within the row.
 def _xi(pid, name, number, pos, grid):
     return {"player": {
         "id": pid, "name": name, "number": number, "pos": pos, "grid": grid,
@@ -556,7 +556,7 @@ def lineups_for(fixture_id: int) -> list:
     return LINEUPS.get(fixture_id, [])
 
 
-# ---- Sự kiện trận đấu (timeline) ----
+# ---- Match events (timeline) ----
 def _event(elapsed, team, pid, pname, type_, detail, assist=None):
     return {
         "time": {"elapsed": elapsed},
@@ -596,11 +596,11 @@ def events_for(fixture_id: int) -> list:
     return EVENTS.get(fixture_id, [])
 
 
-# ---- Top scorers (vua phá lưới) — tự tính từ PLAYER_DB theo giải, sắp theo số bàn ----
+# ---- Top scorers: calculated from PLAYER_DB per league, sorted by goals ----
 def topscorers_for(league: int) -> list:
     lid = int(league)
     rows = [(pid, n) for pid, n in PLAYER_DB.items() if n[11]["id"] == lid]
-    rows.sort(key=lambda x: x[1][5], reverse=True)  # n[5] = số bàn thắng
+    rows.sort(key=lambda x: x[1][5], reverse=True)  # n[5] = goals scored
     out = []
     for pid, n in rows[:10]:
         out.append({
@@ -614,7 +614,7 @@ def topscorers_for(league: int) -> list:
     return out
 
 
-# ---- Danh sách giải cho bộ lọc ----
+# ---- League list for the filter ----
 CURATED_LEAGUES = [
     {"id": 1, "name": "World Cup"},
     {"id": 10, "name": "Friendlies"},
@@ -635,7 +635,7 @@ CURATED_LEAGUES = [
 ]
 
 
-# ---- Tìm kiếm (đội + cầu thủ) — lấy từ TEAM_META + PLAYER_DB ----
+# ---- Search (teams + players): taken from TEAM_META + PLAYER_DB ----
 def search(q: str) -> dict:
     q = (q or "").strip().lower()
     if len(q) < 2:
@@ -648,7 +648,7 @@ def search(q: str) -> dict:
     return {"teams": teams[:8], "players": players[:8]}
 
 
-# ---- Thống kê trận (statistics) ----
+# ---- Match statistics ----
 # fid: (home[poss, shots, sot, xg, corners, fouls, pass%], away[...])
 _STATS_NUM = {
     1003: ((52, 12, 5, "1.4", 6, 11, 84), (48, 10, 4, "1.1", 5, 13, 81)),
@@ -676,7 +676,7 @@ def statistics_for(fixture_id: int) -> list:
     return [_stat_block(f[0]["teams"]["home"], h), _stat_block(f[0]["teams"]["away"], a)]
 
 
-# ---- Chấm điểm cầu thủ sau trận (/fixtures/players) ----
+# ---- Post-match player ratings (/fixtures/players) ----
 def players_ratings_for(fixture_id: int) -> list:
     lus = LINEUPS.get(fixture_id, [])
     if not lus:
@@ -687,7 +687,7 @@ def players_ratings_for(fixture_id: int) -> list:
         players = []
         for x in t["startXI"]:
             p = x["player"]
-            base = round(6.6 + (p["id"] % 12) / 10.0, 1)  # 6.6..7.7 ổn định
+            base = round(6.6 + (p["id"] % 12) / 10.0, 1)  # 6.6..7.7, stable
             rating = "8.4" if p["id"] in scorers else f"{base}"
             players.append({
                 "player": {"id": p["id"], "name": p["name"]},
@@ -701,13 +701,13 @@ def players_ratings_for(fixture_id: int) -> list:
     return out
 
 
-# ---- Đối đầu (head-to-head) ----
+# ---- Head-to-head ----
 def h2h_for(fixture_id: int) -> list:
     f = fixture_by_id(fixture_id)
     if not f:
         return []
     home, away, league = f[0]["teams"]["home"], f[0]["teams"]["away"], f[0]["league"]
-    scores = [(2, 1), (1, 1), (0, 2), (3, 2), (1, 0)]  # cố định cho ổn định
+    scores = [(2, 1), (1, 1), (0, 2), (3, 2), (1, 0)]  # fixed values for stability
     out = []
     for i, (gh, ga) in enumerate(scores):
         h, a = (home, away) if i % 2 == 0 else (away, home)
@@ -718,7 +718,7 @@ def h2h_for(fixture_id: int) -> list:
     return out
 
 
-# ---- Lịch/kết quả gần đây của 1 đội ----
+# ---- A team's recent fixtures/results ----
 _LEAGUE_TEAMS = {
     39: [40, 33, 50, 42, 49, 47],
     140: [541, 529],
@@ -756,11 +756,11 @@ def team_recent(team_id: int) -> list:
     return out
 
 
-# ---- Tự đăng ký mọi CLB/đội tuyển (chỉ-có-trong-BXH) để trang đội mở được ----
+# ---- Auto-register every club/national team (standings-only) so their team page opens ----
 def _register(clubs, league_id):
     ids = []
     for tid, tname in clubs:
-        TEAM_META.setdefault(tid, (tname, "—", "", 0, 1900))  # giữ nguyên đội đã có data chi tiết
+        TEAM_META.setdefault(tid, (tname, "—", "", 0, 1900))  # keep teams that already have detailed data
         SQUADS.setdefault(tid, [])
         ids.append(tid)
     _LEAGUE_TEAMS[league_id] = ids

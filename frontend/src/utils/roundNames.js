@@ -1,9 +1,9 @@
-// Nhãn vòng đấu / giai đoạn cho từng trận.
-// Dịch chuỗi `league.round` của API-Football sang tiếng Việt / tiếng Anh.
-//   vd "Quarter-finals"   -> "Tứ kết" / "Quarter-finals"
+// Round / stage label for each match.
+// Translate API-Football's `league.round` string into Vietnamese / English.
+//   e.g. "Quarter-finals"   -> "Tứ kết" / "Quarter-finals"
 //      "Group Stage - 1"  -> "Vòng bảng · lượt 1" / "Group stage · MD 1"
 //      "Regular Season - 38" -> "Vòng 38" / "Round 38"
-// Đọc state.locale (reactive) nên gọi trong template sẽ tự dịch lại khi đổi ngôn ngữ.
+// Reads state.locale (reactive), so calling it in a template re-translates when the language changes.
 import { state } from '../i18n'
 
 const DICT = {
@@ -47,14 +47,14 @@ export function roundLabel(round) {
   if (!round) return ''
   const D = DICT[state.locale === 'en' ? 'en' : 'vi']
   const r = String(round).toLowerCase().trim()
-  // Giao hữu: API trả round = "Friendly International" / "Club Friendlies" -> trùng với tên
-  // giải ("Giao hữu") và là tiếng Anh -> ẩn đi để header không bị lặp/lẫn ngôn ngữ.
+  // Friendlies: the API returns round = "Friendly International" / "Club Friendlies" -> same as the
+  // competition name ("Friendlies") and in English -> hidden so the header does not repeat or mix languages.
   if (/friendl/.test(r)) return ''
-  const numMatch = r.match(/(\d+)\s*$/)          // số ở CUỐI chuỗi (vd "- 38", "- 1")
+  const numMatch = r.match(/(\d+)\s*$/)          // number at the END of the string (e.g. "- 38", "- 1")
   const num = numMatch ? numMatch[1] : ''
 
-  // THỨ TỰ kiểm tra rất quan trọng: "semi-finals"/"quarter-finals"/"3rd place final" đều
-  // chứa chữ "final" -> phải xét các vòng cụ thể TRƯỚC, để "final" trơ trọi mới ra Chung kết.
+  // The ORDER of checks matters: "semi-finals"/"quarter-finals"/"3rd place final" all
+  // contain the word "final" -> check the specific rounds FIRST, so only a bare "final" becomes the Final.
   if (/3rd place|third place/.test(r)) return D.third
   if (/semi/.test(r)) return D.semi
   if (/quarter/.test(r)) return D.quarter
@@ -67,15 +67,15 @@ export function roundLabel(round) {
   if (/qualif/.test(r)) return num ? `${D.qualifying} ${num}` : D.qualifying
   if (/relegation/.test(r)) return D.relegation
   if (/group/.test(r)) {
-    // "Group A" -> Vòng bảng A ; "Group Stage - 1" -> Vòng bảng · lượt 1
+    // "Group A" -> Group A ; "Group Stage - 1" -> Group stage · MD 1
     const letter = r.match(/group\s+([a-z])\b/)
     if (letter) return `${D.group} ${letter[1].toUpperCase()}`
     return num ? `${D.group} · ${D.matchday} ${num}` : D.group
   }
-  // VĐQG / League Stage: "Regular Season - 38", "League Stage - 1" -> Vòng 38 / Round 1
+  // Domestic league / League Stage: "Regular Season - 38", "League Stage - 1" -> Round 38 / Round 1
   if (/regular season|league stage|^round\b|matchday|round - /.test(r)) {
     return num ? `${D.round} ${num}` : round
   }
   if (/play-?\s?off/.test(r)) return D.playoff
-  return round   // không khớp mẫu nào -> trả NGUYÊN VĂN (không bao giờ làm mất chữ)
+  return round   // no pattern matched -> return the ORIGINAL text (never lose words)
 }

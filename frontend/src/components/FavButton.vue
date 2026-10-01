@@ -4,7 +4,7 @@ import { useFavoritesStore } from '../stores/favorites'
 
 const props = defineProps({
   type: { type: String, required: true }, // 'team' | 'player' | 'league' | 'match'
-  item: { type: Object, required: true }, // { id, ... } tuỳ loại
+  item: { type: Object, required: true }, // { id, ... } depending on the type
 })
 
 const fav = useFavoritesStore()

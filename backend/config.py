@@ -1,6 +1,6 @@
 """
-Đọc cấu hình từ file .env (hoặc biến môi trường).
-Logic: nếu không có API key -> tự bật chế độ mock để app vẫn chạy được.
+Read configuration from the .env file (or environment variables).
+Logic: if there is no API key -> automatically enable mock mode so the app still runs.
 """
 from datetime import datetime
 
@@ -10,17 +10,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     api_football_key: str = ""
     api_football_host: str = "v3.football.api-sports.io"
-    # "direct" = đăng ký dashboard api-sports.io (header x-apisports-key)
-    # "rapidapi" = đăng ký qua RapidAPI (header x-rapidapi-key)
+    # "direct" = subscribed via the api-sports.io dashboard (header x-apisports-key)
+    # "rapidapi" = subscribed via RapidAPI (header x-rapidapi-key)
     api_football_via: str = "direct"
-    # 0 = TỰ SUY mùa theo ngày (khỏi cập nhật hằng năm). Đặt >0 (vd 2025) để GHIM cứng 1 mùa.
+    # 0 = INFER the season from the date (no yearly updates needed). Set >0 (e.g. 2025) to PIN a season.
     season: int = 0
     use_mock: bool = True
-    # CORS: 1 hoặc nhiều origin, cách nhau bằng dấu phẩy (cho lúc deploy)
+    # CORS: one or more origins, separated by commas (for deployment)
     frontend_origin: str = "http://localhost:5173"
     cache_ttl_seconds: int = 300
-    # Bật các endpoint /_debug/* (xem nguyên văn API). MẶC ĐỊNH tắt ở production để
-    # không lộ dữ liệu nội bộ + không tốn quota. Đặt DEBUG=true ở local khi cần chẩn lỗi.
+    # Enable the /_debug/* endpoints (show raw API output). DISABLED by default in production so
+    # internal data is not exposed and no quota is wasted. Set DEBUG=true locally when debugging.
     debug: bool = False
 
     model_config = SettingsConfigDict(
@@ -32,48 +32,48 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Làm sạch khoảng trắng/xuống dòng lẫn trong biến môi trường (vd dán key trên dashboard
-# bị thừa '\n' -> httpx báo "Illegal header value" và MỌI request API thất bại).
+# Strip spaces/newlines from environment variables (e.g. a key pasted from the dashboard
+# with a trailing '\n' -> httpx raises "Illegal header value" and EVERY API request fails).
 settings.api_football_key = (settings.api_football_key or "").strip()
 settings.api_football_host = (settings.api_football_host or "").strip()
 settings.api_football_via = (settings.api_football_via or "").strip()
 
-# An toàn: chưa có key thì luôn dùng mock, tránh gọi API lỗi 401.
+# Safety: without a key always use mock mode, to avoid API calls failing with 401.
 if not settings.api_football_key:
     settings.use_mock = True
 
 
-# ===== Tự suy MÙA theo ngày (khỏi cập nhật hằng năm) =====
-# Mùa giải châu Âu vắt 2 năm (tháng 8 -> tháng 5). Quy ước: tháng >= 7 thuộc mùa NĂM ĐÓ,
-# tháng < 7 thuộc mùa NĂM TRƯỚC. Vd: 06/2026 -> 2025 (mùa 2025/26 vừa xong);
-# 08/2026 -> 2026 (mùa 2026/27 mới). Khớp đúng cách suy season ở endpoint /fixtures.
+# ===== Infer the SEASON from the date (no yearly updates needed) =====
+# European seasons span 2 years (August -> May). Rule: month >= 7 belongs to THAT YEAR's season,
+# month < 7 belongs to the PREVIOUS YEAR's season. E.g. 06/2026 -> 2025 (2025/26 season just finished);
+# 08/2026 -> 2026 (new 2026/27 season). Matches how the /fixtures endpoint infers the season.
 def current_season(now=None):
     now = now or datetime.now()
     return now.year if now.month >= 7 else now.year - 1
 
 
 def default_season():
-    """Mùa mặc định cho standings / vua phá lưới / hồ sơ cầu thủ.
-    SEASON env > 0 -> GHIM đúng giá trị đó (ghi đè tay khi cần xem mùa cũ).
-    SEASON = 0 (hoặc không đặt) -> TỰ SUY theo ngày, không phải sửa mỗi năm."""
+    """Default season for standings / top scorers / player profiles.
+    SEASON env > 0 -> PIN exactly that value (manual override to view an old season).
+    SEASON = 0 (or unset) -> INFER from the date, no yearly edits needed."""
     return settings.season if settings.season and settings.season > 0 else current_season()
 
 
-# Giải có mùa ĐẶC BIỆT, không theo quy luật mùa-năm thường:
-#  - World Cup (4 năm/lần) -> ghim năm kỳ giải; cập nhật khi có kỳ mới (2030...).
+# Competitions with SPECIAL seasons that do not follow the usual season-year rule:
+#  - World Cup (every 4 years) -> pin the tournament year; update for each new edition (2030...).
 LEAGUE_SEASON = {
     1: 2026,   # World Cup 2026
 }
 
-# Giải chạy theo NĂM DƯƠNG LỊCH (tháng 1–12): season = đúng năm hiện tại (vd MLS).
+# Competitions that run on the CALENDAR YEAR (January to December): season = the current year (e.g. MLS).
 CALENDAR_YEAR_LEAGUES = {253}  # MLS
 
 
 def season_for(league):
-    """Trả season đúng cho 1 giải:
-      - giải đặc biệt (World Cup...) -> theo LEAGUE_SEASON,
-      - giải năm dương lịch (MLS) -> đúng NĂM hiện tại,
-      - còn lại -> mùa mặc định (tự suy theo ngày, trừ khi SEASON env ghim cứng)."""
+    """Return the correct season for a competition:
+      - special competitions (World Cup...) -> from LEAGUE_SEASON,
+      - calendar-year leagues (MLS) -> the current YEAR,
+      - everything else -> the default season (inferred from the date, unless pinned by the SEASON env)."""
     try:
         lid = int(league)
     except (TypeError, ValueError):
@@ -85,38 +85,38 @@ def season_for(league):
     return default_season()
 
 
-# ===== Mốc bàn thắng OFFICIAL (nhập tay) =====
-# Vì không API miễn phí nào trả đúng con số official đang chạy, ta neo 1 con số official
-# tính ĐẾN HẾT mùa `through`, rồi app TỰ CỘNG thêm bàn chính thức từ các mùa SAU đó (qua API).
-# => Mỗi năm chỉ cần cập nhật 1 lần sau khi mùa kết thúc; bàn trong mùa hiện tại tự cộng.
+# ===== OFFICIAL goals baseline (entered manually) =====
+# No free API returns the exact running official total, so we anchor an official number
+# up to the END of season `through`, and the app AUTOMATICALLY adds official goals from later seasons (via the API).
+# => Only one update per year after the season ends; goals in the current season are added automatically.
 #
-# player_id: lấy từ URL trang cầu thủ (vd /player/874 -> 874).
-# goals: tổng bàn official tính đến hết mùa `through` (tra Wikipedia/官 nguồn bạn tin tưởng).
-# through: số mùa cuối ĐÃ neo (vd 2024 = đã tính hết mùa 2024/25).
+# player_id: taken from the player page URL (e.g. /player/874 -> 874).
+# goals: total official goals up to the end of season `through` (check Wikipedia or another trusted source).
+# through: the last season ALREADY included (e.g. 2024 = everything up to the end of 2024/25).
 CAREER_BASELINE = {
-    # Cristiano Ronaldo — chỉnh tay để TỔNG hiện tại = 977 (official, khớp số thật ngoài đời).
-    # Cơ chế: total = goals + bàn official các mùa SAU `through` (app tự cộng, ĐÃ áp STAT_OVERRIDES
-    # nên khớp bảng: King's Cup ma về 0, có Super Cup). GIỮ tự-cộng: bàn official mới -> tự tăng.
-    # Bộ dữ liệu mô phỏng đang tính added=31 (tổng 978) vì có thêm 1 bàn Al-Nassr Pro League 2026/27;
-    # hạ baseline 947->946 để khớp số thật 977 (946 + 31 = 977). Chỉ là dịch SÀN xuống 1, không tắt tự-cộng.
+    # Cristiano Ronaldo: manually adjusted so the CURRENT total = 977 (official, matches the real-world figure).
+    # Mechanism: total = goals + official goals from seasons AFTER `through` (added automatically, WITH STAT_OVERRIDES applied
+    # so it matches the table: phantom King's Cup goals set to 0, Super Cup included). Auto-adding is KEPT: new official goals -> increases automatically.
+    # The simulated data currently gives added=31 (total 978) because of 1 extra Al-Nassr Pro League goal in 2026/27;
+    # baseline lowered 947->946 to match the real figure of 977 (946 + 31 = 977). This only shifts the FLOOR down by 1; auto-adding stays on.
     874: {"goals": 946, "through": 2024},
-    # Lionel Messi (id 154) — neo 911 bàn official, TỰ CẬP NHẬT mùa hiện tại.
-    # Cơ chế: baseline = official tính ĐẾN HẾT mùa 2025 = 889; app TỰ CỘNG bàn official mùa
-    # 2026 (API đang là 22) -> 889 + 22 = 911 ngay bây giờ, và tự tăng khi Messi ghi thêm.
-    # (API tự cộng toàn bộ ra sai vì thiếu dữ liệu mùa cũ 2004–2015, nên phải neo phần cũ.)
+    # Lionel Messi (id 154): anchored at 911 official goals, the current season UPDATES AUTOMATICALLY.
+    # Mechanism: baseline = official goals up to the END of season 2025 = 889; the app AUTOMATICALLY adds official goals for
+    # 2026 (API currently shows 22) -> 889 + 22 = 911 right now, and it increases as Messi scores more.
+    # (Summing everything from the API is wrong because data for old seasons 2004–2015 is missing, so the old part must be anchored.)
     154: {"goals": 889, "through": 2025},
-    # Neymar (id 276) — TỔNG official ~491 (Santos/Barça/PSG/Al-Hilal + Brazil), tính ~06/2026.
-    # through=2025 + baseline 483 -> 483 + (Santos mùa 2026, API đang đếm 8) = 491; bàn mới TỰ CỘNG.
+    # Neymar (id 276): official TOTAL ~491 (Santos/Barça/PSG/Al-Hilal + Brazil), as of ~06/2026.
+    # through=2025 + baseline 483 -> 483 + (Santos 2026 season, API currently counts 8) = 491; new goals are ADDED AUTOMATICALLY.
     276: {"goals": 483, "through": 2025},
-    # Karim Benzema (id 759) — TỔNG official ~515 (Lyon/Real/Al-Ittihad + France), tính ~06/2026.
-    # through=2025 -> mùa 2026 (API đang 0) tự cộng khi ghi bàn. Nguồn: Wikipedia/StatMuse.
+    # Karim Benzema (id 759): official TOTAL ~515 (Lyon/Real/Al-Ittihad + France), as of ~06/2026.
+    # through=2025 -> the 2026 season (API currently 0) is added automatically when he scores. Sources: Wikipedia/StatMuse.
     759: {"goals": 515, "through": 2025},
-    # Kylian Mbappé (id 278) — TỔNG official 429 (chỉnh tay theo số thực tế). baseline 425 +
-    # bàn mùa 2026 API đang đếm (hiện 4 bàn World Cup) = 429. through=2025 -> bàn mới ở WC/giải
-    # chính thức do API TỰ CỘNG, không cần chỉnh tay.
+    # Kylian Mbappé (id 278): official TOTAL 429 (manually adjusted to the real figure). baseline 425 +
+    # goals the API counts for 2026 (currently 4 World Cup goals) = 429. through=2025 -> new goals at the World Cup/official
+    # competitions are ADDED AUTOMATICALLY by the API, no manual edits needed.
     278: {"goals": 425, "through": 2025},
-    # Erling Haaland (id 1100) — TỔNG official ~372 (CLB Bryne/Molde/Salzburg/Dortmund/Man City +
-    # Na Uy), tính ~06/2026. API thiếu mùa đầu (Bryne/Molde 2016–2019) nên neo tay phần cũ.
-    # through=2025 + baseline 370 -> 370 + (mùa 2026 API đang 2) = 372; bàn mới TỰ CỘNG.
+    # Erling Haaland (id 1100): official TOTAL ~372 (clubs Bryne/Molde/Salzburg/Dortmund/Man City +
+    # Norway), as of ~06/2026. The API is missing early seasons (Bryne/Molde 2016–2019), so the old part is anchored manually.
+    # through=2025 + baseline 370 -> 370 + (2026 season, API currently 2) = 372; new goals are ADDED AUTOMATICALLY.
     1100: {"goals": 370, "through": 2025},
 }

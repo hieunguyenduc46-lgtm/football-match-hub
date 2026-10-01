@@ -1,15 +1,15 @@
 import axios from 'axios'
 
-// Dev: để trống VITE_API_BASE -> dùng '/api' (Vite proxy sang backend localhost).
-// Prod: đặt VITE_API_BASE = URL backend đã deploy, ví dụ https://...onrender.com/api
+// Dev: leave VITE_API_BASE empty -> use '/api' (Vite proxies to the backend on localhost).
+// Prod: set VITE_API_BASE = the deployed backend URL, e.g. https://...onrender.com/api
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '/api',
   timeout: 15000,
 })
 
-// API-Football đôi khi trả TÊN đã MÃ HOÁ HTML (vd "O&apos;Reilly", "C&ocirc;te...") -> Vue
-// render text nên hiện literal "&apos;". Giải mã 1 lần ở đây để mọi nơi hiển thị tên đúng.
-// Chỉ chạm chuỗi CÓ ký tự '&' (đa số chuỗi bỏ qua ngay), không đổi logic dữ liệu khác.
+// API-Football sometimes returns HTML-ENCODED names (e.g. "O&apos;Reilly", "C&ocirc;te...") -> Vue
+// renders text, so the literal "&apos;" appears. Decode once here so names display correctly everywhere.
+// Only touches strings CONTAINING '&' (most strings are skipped immediately); no other data logic changes.
 function decodeEntities(s) {
   if (typeof s !== 'string' || s.indexOf('&') === -1) return s
   return s
@@ -18,7 +18,7 @@ function decodeEntities(s) {
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&#0*(\d+);/g, (_, n) => String.fromCharCode(+n))
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/&amp;/g, '&') // luôn cuối cùng để không nuốt nhầm các entity khác
+    .replace(/&amp;/g, '&') // always last so it does not accidentally swallow other entities
 }
 
 function deepDecode(v) {

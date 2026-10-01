@@ -13,13 +13,13 @@ import MatchCard from '../components/MatchCard.vue'
 const route = useRoute()
 const tab = ref('national') // 'national' | 'domestic'
 
-// Tên nước canon (tiếng Anh) lấy từ URL; hiển thị tiếng Việt nếu đang chế độ vi.
+// Canonical country name (English) comes from the URL; show the Vietnamese name when in vi mode.
 const countryEn = computed(() => route.params.name || '')
 const title = computed(() =>
   state.locale === 'vi' ? COUNTRY_VI[countryEn.value] || countryEn.value : countryEn.value
 )
 
-// ---- Tab ĐỘI TUYỂN: trận gần đây + sắp tới ----
+// ---- NATIONAL TEAM tab: recent + upcoming matches ----
 const nat = ref({ team: null, recent: [], upcoming: [] })
 const natLoading = ref(false)
 let natLoadedFor = null
@@ -37,7 +37,7 @@ async function loadNational(name) {
 }
 const hasNat = computed(() => nat.value.recent.length || nat.value.upcoming.length)
 
-// ---- Tab GIẢI TRONG NƯỚC: lọc từ chỉ mục đã tải sẵn (không gọi thêm API) ----
+// ---- DOMESTIC LEAGUES tab: filtered from the preloaded index (no extra API call) ----
 const leagues = ref([])
 const idxReady = ref(false)
 async function loadDomestic(name) {
@@ -48,7 +48,7 @@ async function loadDomestic(name) {
 
 function sync() {
   const name = countryEn.value
-  setTitle(title.value)        // tiêu đề tab = tên quốc gia
+  setTitle(title.value)        // tab title = country name
   loadDomestic(name)
   if (tab.value === 'national') loadNational(name)
 }
@@ -71,7 +71,7 @@ watch(tab, (v) => { if (v === 'national') loadNational(countryEn.value) })
     <button class="tab" :class="{ active: tab === 'domestic' }" @click="tab = 'domestic'">{{ $t('tab_domestic') }}</button>
   </div>
 
-  <!-- Đội tuyển quốc gia -->
+  <!-- National team -->
   <div v-if="tab === 'national'">
     <div v-if="natLoading">
       <div class="skeleton" v-for="n in 4" :key="n"></div>
@@ -96,7 +96,7 @@ watch(tab, (v) => { if (v === 'national') loadNational(countryEn.value) })
     </template>
   </div>
 
-  <!-- Giải trong nước -->
+  <!-- Domestic leagues -->
   <div v-else>
     <div v-if="idxReady && leagues.length === 0" class="center">{{ $t('noLeaguesCountry') }}</div>
     <div v-else>

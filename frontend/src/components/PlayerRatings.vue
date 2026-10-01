@@ -7,16 +7,16 @@ const props = defineProps({ data: { type: Array, required: true } })
 const router = useRouter()
 
 function rating(p) {
-  // Bọc optional chaining: API có thể trả cầu thủ thiếu statistics/games.
+  // Optional chaining guard: the API may return players without statistics/games.
   return parseFloat(p?.statistics?.[0]?.games?.rating) || 0
 }
-// Tổng bàn của cầu thủ trong trận (an toàn khi thiếu dữ liệu).
+// Player's total goals in the match (safe when data is missing).
 function goalsOf(p) {
   return p?.statistics?.[0]?.goals?.total || 0
 }
 
-// MOTM = điểm cao nhất toàn trận. Chỉ tính khi có rating thật (>0); nếu cả trận chưa
-// chấm điểm thì KHÔNG gán MOTM (tránh badge nhầm vào cầu thủ đầu danh sách).
+// MOTM = highest rating in the match. Only counted when there is a real rating (>0); if the match has not
+// been rated yet, do NOT assign MOTM (avoids wrongly badging the first player in the list).
 const motmId = computed(() => {
   let best = null
   for (const t of props.data) {

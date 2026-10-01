@@ -13,7 +13,7 @@
   --header-bg: rgba(14, 17, 22, 0.9);
 }
 
-/* Giao diện sáng */
+/* Light theme */
 [data-theme="light"] {
   --bg: #f4f6f8;
   --surface: #ffffff;
@@ -76,7 +76,7 @@ a { color: inherit; text-decoration: none; }
 }
 .search::placeholder { color: var(--text-dim); }
 
-/* Dropdown kết quả tìm kiếm */
+/* Search results dropdown */
 .search-dd {
   position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 50;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
@@ -88,14 +88,14 @@ a { color: inherit; text-decoration: none; }
 .dd-item img { width: 24px; height: 24px; object-fit: contain; flex: 0 0 auto; }
 .dd-item img.round { border-radius: 50%; object-fit: cover; }
 
-/* Nút đổi sáng/tối */
+/* Light/dark toggle button */
 .theme-btn {
   flex: 0 0 auto; background: var(--surface-2); border: 1px solid var(--border);
   border-radius: 10px; width: 38px; height: 38px; font-size: 16px; cursor: pointer;
 }
 .theme-btn:hover { border-color: var(--accent); }
 
-/* Dải ngày */
+/* Date strip */
 .date-strip { display: flex; gap: 6px; overflow-x: auto; padding: 12px 0; scrollbar-width: none; }
 .date-strip::-webkit-scrollbar { display: none; }
 .date-chip {
@@ -108,7 +108,7 @@ a { color: inherit; text-decoration: none; }
 .date-chip.active { background: var(--accent); color: #06140b; border-color: var(--accent); }
 .date-chip.active .dn { color: #06140b; }
 
-/* Lọc giải */
+/* League filter */
 .filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .league-select {
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
@@ -235,14 +235,14 @@ table.standings { width: 100%; border-collapse: collapse; font-size: 14px; }
 .stat .num { font-size: 22px; font-weight: 800; }
 .stat .label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 
-/* ---- Phong độ (form) ---- */
+/* ---- Form ---- */
 .form-row { display: flex; align-items: center; gap: 6px; margin: 12px 0; }
 .form-b { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #fff; }
 .form-b.f-W { background: var(--accent); color: #06140b; }
 .form-b.f-D { background: #6b7480; }
 .form-b.f-L { background: var(--live); }
 
-/* ---- Zone bảng xếp hạng ---- */
+/* ---- Standings zones ---- */
 .standings tr.zone-cl td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .standings tr.zone-el td:first-child { box-shadow: inset 3px 0 0 #3b82f6; }
 .standings tr.zone-conf td:first-child { box-shadow: inset 3px 0 0 #14b8a6; }
@@ -272,9 +272,9 @@ table.standings { width: 100%; border-collapse: collapse; font-size: 14px; }
 }
 @keyframes sk { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
 
-/* ---- Responsive: điện thoại ---- */
-/* Trên màn hẹp, header 1 hàng làm ô tìm kiếm bị bóp còn 1 chấm. Cho header xuống
-   dòng: logo + các nút ở hàng trên, ô tìm kiếm chiếm trọn 1 hàng riêng bên dưới. */
+/* ---- Responsive: mobile ---- */
+/* On narrow screens a single-row header squeezes the search box to a dot. Let the header wrap:
+   logo + buttons on the top row, the search box takes a full row of its own below. */
 @media (max-width: 560px) {
   .app-header__inner { flex-wrap: wrap; gap: 8px 6px; padding: 10px 12px; }
   .logo { font-size: 16px; order: 0; margin-right: auto; }

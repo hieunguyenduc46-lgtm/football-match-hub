@@ -1,5 +1,5 @@
-// Đặt tiêu đề tab trình duyệt. Giúp tab/bookmark/lịch sử hiển thị đúng nội dung,
-// và tốt hơn khi người dùng mở nhiều tab. (Preview khi share link dùng OG tags ở index.html.)
+// Set the browser tab title. Makes tabs/bookmarks/history show the right content,
+// and helps when the user has many tabs open. (Link previews when sharing use the OG tags in index.html.)
 const SUFFIX = 'Football Match Hub'
 
 export function setTitle(name) {

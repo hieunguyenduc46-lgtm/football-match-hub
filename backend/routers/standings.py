@@ -10,6 +10,6 @@ router = APIRouter(prefix="/api", tags=["standings"])
 
 @router.get("/standings")
 async def standings(league: int = 39, season: Optional[int] = None):
-    """Bảng xếp hạng 1 giải. Mặc định Premier League (39).
-    Mùa tự chọn theo giải (vd World Cup -> 2026) nếu client không truyền season."""
+    """Standings of a competition. Defaults to the Premier League (39).
+    The season is chosen per league (e.g. World Cup -> 2026) if the client does not pass one."""
     return {"response": await api_football.get_standings(league, season or config.season_for(league))}

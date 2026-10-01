@@ -4,7 +4,7 @@ import HomeView from '../views/HomeView.vue'
 import { setTitle } from '../utils/title'
 import { t } from '../i18n'
 
-// Lazy-load các trang ít dùng hơn để bundle nhẹ.
+// Lazy-load less-used pages to keep the bundle small.
 const routes = [
   { path: '/', name: 'home', component: HomeView },
   { path: '/match/:id', name: 'match', component: () => import('../views/MatchDetailView.vue') },
@@ -15,22 +15,22 @@ const routes = [
   { path: '/country/:name', name: 'country', component: () => import('../views/CountryView.vue') },
   { path: '/favorites', name: 'favorites', component: () => import('../views/FavoritesView.vue') },
   { path: '/compare', name: 'compare', component: () => import('../views/CompareView.vue') },
-  // Bắt MỌI đường dẫn còn lại (URL sai / link cũ) -> trang 404 thân thiện. ĐẶT CUỐI CÙNG.
+  // Catch ALL remaining paths (wrong URLs / old links) -> friendly 404 page. MUST BE LAST.
   { path: '/:pathMatch(.*)*', name: 'notfound', component: () => import('../views/NotFoundView.vue') },
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
-  // Vào trang mới -> lên đầu.
-  // Back/forward -> có savedPosition. Nhưng trang tải data async nên lúc back nội dung
-  // chưa render xong (trang còn rỗng) -> không thể cuộn tới vị trí cũ. Vì vậy ĐỢI cho
-  // tới khi trang đủ cao mới khôi phục cuộn (poll tối đa ~2s rồi cuộn dù sao).
+  // New page -> scroll to the top.
+  // Back/forward -> savedPosition exists. But pages load data asynchronously, so when going back the content
+  // has not rendered yet (the page is still empty) -> cannot scroll to the old position. So WAIT
+  // until the page is tall enough before restoring the scroll (poll up to ~2s, then scroll anyway).
   scrollBehavior(to, from, savedPosition) {
     if (!savedPosition) return { top: 0 }
-    // Trang đích có thể chưa render xong (đang tải data) -> đợi tới khi đủ cao rồi mới
-    // khôi phục cuộn (poll tối đa ~2s). Với trang đã được <keep-alive> cache thì DOM còn
-    // nguyên nên điều kiện đúng ngay lập tức.
+    // The target page may not have finished rendering (still loading data) -> wait until it is tall enough before
+    // restoring the scroll (poll up to ~2s). For pages cached by <keep-alive> the DOM is still
+    // intact, so the condition is met immediately.
     return new Promise((resolve) => {
       const target = savedPosition.top
       let tries = 0
@@ -44,8 +44,8 @@ const router = createRouter({
   },
 })
 
-// Tiêu đề tab theo trang. Trang TĨNH set ngay; trang ĐỘNG (player/team/league/match/country)
-// set mặc định ở đây rồi được chính view ghi đè bằng tên cụ thể khi tải xong dữ liệu.
+// Tab title per page. STATIC pages are set immediately; DYNAMIC pages (player/team/league/match/country)
+// get a default here, which the view then overrides with the specific name once data has loaded.
 router.afterEach((to) => {
   const titles = {
     home: null,
@@ -56,9 +56,9 @@ router.afterEach((to) => {
   setTitle(to.name in titles ? titles[to.name] : null)
 })
 
-// Sau khi DEPLOY bản mới, các file chunk cũ bị xoá -> import động trang lazy có thể lỗi
-// "Failed to fetch dynamically imported module" (người dùng đang mở app / cache cũ) -> trang
-// trắng. Bắt lỗi đó và TẢI LẠI 1 LẦN để lấy bản mới. sessionStorage chống lặp vô hạn.
+// After DEPLOYING a new version, old chunk files are deleted -> dynamically importing a lazy page can fail with
+// "Failed to fetch dynamically imported module" (user has the app open / old cache) -> blank
+// page. Catch that error and RELOAD ONCE to get the new version. sessionStorage prevents an infinite loop.
 router.onError((err, to) => {
   const msg = String((err && err.message) || '')
   if (/dynamically imported module|module script failed|Failed to fetch/i.test(msg)) {

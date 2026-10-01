@@ -1,5 +1,5 @@
 # Render Blueprint cho backend FastAPI.
-# Trên Render: New + -> Blueprint -> chọn repo này. Render tự đọc file này.
+# On Render: New + -> Blueprint -> pick this repo. Render reads this file automatically.
 services:
   - type: web
     name: football-match-hub-api
@@ -10,12 +10,12 @@ services:
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: USE_MOCK
-        value: "false"           # dùng API thật (đã có gói Pro). Thiếu key -> config.py tự fallback mock.
+        value: "false"           # use the real API (Pro plan). Missing key -> config.py falls back to mock automatically.
       - key: API_FOOTBALL_KEY
-        sync: false              # tự nhập trong dashboard Render (bí mật)
+        sync: false              # entered manually in the Render dashboard (secret)
       - key: API_FOOTBALL_VIA
         value: "direct"
       - key: SEASON
-        value: "0"               # 0 = TỰ SUY mùa theo ngày (khỏi sửa mỗi năm). Đặt năm cụ thể để ghim.
+        value: "0"               # 0 = INFER the season from the date (no yearly edits). Set a specific year to pin it.
       - key: FRONTEND_ORIGIN
-        sync: false              # dán URL frontend đã deploy, vd https://...vercel.app
+        sync: false              # paste the deployed frontend URL, e.g. https://...vercel.app

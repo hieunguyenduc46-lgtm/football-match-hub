@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 
-// Từ điển 2 ngôn ngữ. Thêm khoá mới thì điền cả vi + en.
+// Two-language dictionary. When adding a new key, fill in both vi + en.
 export const messages = {
   vi: {
     search_ph: 'Tìm CLB, cầu thủ, CLB A vs B…',
@@ -323,10 +323,10 @@ export const state = reactive({ locale: saved === 'en' ? 'en' : 'vi' })
 
 export function setLocale(l) {
   state.locale = l
-  try { localStorage.setItem('lang', l) } catch (e) { /* bỏ qua */ }
+  try { localStorage.setItem('lang', l) } catch (e) { /* ignore */ }
 }
 
-// Hàm dịch. Đọc state.locale (reactive) nên template tự re-render khi đổi ngôn ngữ.
+// Translation function. Reads state.locale (reactive) so templates re-render automatically when the language changes.
 export function t(key) {
   const d = messages[state.locale] || messages.vi
   return key in d ? d[key] : (messages.vi[key] ?? key)

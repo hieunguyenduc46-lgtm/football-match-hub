@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { imgFallback } from '../utils/format'
 import { injuryName } from '../utils/injuryNames'
 
-// statistics = object /teams/statistics (đã trim, kèm _league). injuries = [{name, reason, photo}]
+// statistics = /teams/statistics object (trimmed, with _league). injuries = [{name, reason, photo}]
 const props = defineProps({
   statistics: { type: Object, default: () => ({}) },
   injuries: { type: Array, default: () => [] },
@@ -28,7 +28,7 @@ const hasAny = computed(() => hasStats.value || injuries.value.length)
   <div v-if="loading" class="skeleton" style="height:110px; margin-top:16px"></div>
 
   <template v-else-if="hasAny">
-    <!-- THỐNG KÊ MÙA -->
+    <!-- SEASON STATISTICS -->
     <div v-if="hasStats">
       <h2 class="page-title" style="font-size:16px; display:flex; align-items:center; gap:8px;">
         {{ $t('teamStatsH') }}
@@ -49,7 +49,7 @@ const hasAny = computed(() => hasStats.value || injuries.value.length)
       </div>
     </div>
 
-    <!-- CHẤN THƯƠNG / TREO GIÒ -->
+    <!-- INJURIES / SUSPENSIONS -->
     <div v-if="injuries.length">
       <h2 class="page-title" style="font-size:16px">{{ $t('teamInjuriesH') }}</h2>
       <div class="ti-inj">

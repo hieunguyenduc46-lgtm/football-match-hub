@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#0e1116" />
     <link rel="icon" type="image/svg+xml" href="/icon-v2.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192-v2.png" />
-    <!-- iOS bỏ qua icon SVG -> dùng PNG cho apple-touch-icon (đổi tên -v2 để phá cache icon cũ) -->
+    <!-- iOS ignores SVG icons -> use a PNG for apple-touch-icon (renamed -v2 to bust the old icon cache) -->
     <link rel="apple-touch-icon" href="/apple-touch-icon-v2.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -16,7 +16,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Football Match Hub</title>
 
-    <!-- Open Graph (preview khi share link lên Facebook/Zalo/Messenger...) -->
+    <!-- Open Graph (link preview when sharing on Facebook/Zalo/Messenger...) -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Football Match Hub" />
     <meta property="og:title" content="Football Match Hub" />

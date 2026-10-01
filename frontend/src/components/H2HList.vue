@@ -8,13 +8,13 @@ const props = defineProps({
   homeTeamId: { type: Number, required: true },
 })
 
-// Tỉ số luân lưu (nếu có) -> hiện cạnh tỉ số để biết đội nào thắng khi hoà.
+// Penalty shoot-out score (if any) -> shown next to the score to tell who won a draw.
 function penStr(m) {
   const p = m?.score?.penalty
   return (p && p.home != null && p.away != null) ? `${p.home}-${p.away}` : null
 }
 
-// Tổng kết: số trận thắng của đội nhà (trận hiện tại) / hòa / thua, xét theo homeTeamId.
+// Summary: wins of the home team (current match) / draws / losses, based on homeTeamId.
 const summary = computed(() => {
   let w = 0, d = 0, l = 0
   for (const m of (props.matches || [])) {

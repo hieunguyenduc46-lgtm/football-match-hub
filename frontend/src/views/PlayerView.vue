@@ -12,20 +12,20 @@ import PlayerHistory from '../components/PlayerHistory.vue'
 const route = useRoute()
 const data = ref(null)
 const loading = ref(true)
-const career = ref(null)        // tổng bàn sự nghiệp (tải riêng, có thể chậm)
-const motm = ref(null)          // số lần hay nhất trận mùa này (tải riêng, quét fixtures)
-const careerLoading = ref(false) // đang tải thẻ tổng bàn -> hiện placeholder "Đang tính…"
-const motmLoading = ref(false)   // đang tải thẻ POTM -> hiện placeholder "Đang tính…"
-const history = ref(null)        // danh hiệu + chuyển nhượng + chấn thương + thống kê theo mùa
+const career = ref(null)        // career goal total (loaded separately, may be slow)
+const motm = ref(null)          // player-of-the-match count this season (loaded separately, scans fixtures)
+const careerLoading = ref(false) // loading the career-goals card -> show the "Calculating…" placeholder
+const motmLoading = ref(false)   // loading the POTM card -> show the "Calculating…" placeholder
+const history = ref(null)        // trophies + transfers + injuries + per-season stats
 const historyLoading = ref(false)
 
 const player = computed(() => data.value?.player || null)
 
-// ===== Tách thống kê CLB vs ĐTQG, KHÔNG gộp — hiển thị theo TỪNG GIẢI =====
-// API-Football trả `statistics` = mảng, mỗi ĐỘI + mỗi GIẢI một phần tử
+// ===== Split CLUB vs NATIONAL TEAM stats, NOT merged — shown PER COMPETITION =====
+// API-Football returns `statistics` = an array, one entry per TEAM + per COMPETITION
 // (vd Al-Nassr / Saudi Pro League, Al-Nassr / AFC Champions League Two,
-//  Portugal / Nations League...). Logic phân loại + gộp dùng CHUNG với trang
-// so sánh ở utils/playerStats.js để hai trang không bao giờ lệch số liệu.
+//  Portugal / Nations League...). The classify + aggregate logic is SHARED with the
+// compare page in utils/playerStats.js so the two pages never disagree.
 
 const split = computed(() => splitStats(data.value))
 
@@ -34,15 +34,15 @@ const nationalRows = computed(() => split.value.national)
 const clubTotal = computed(() => totalsOf(clubRows.value))
 const nationalTotal = computed(() => totalsOf(nationalRows.value))
 
-// Tên CLB hiển thị ở tiêu đề: lấy đội đá nhiều trận nhất.
+// Club name shown in the header: the team with the most appearances.
 const clubTeamName = computed(() => {
   const rows = clubRows.value
   if (!rows.length) return ''
   return rows.reduce((b, r) => (r.apps > b.apps ? r : b), rows[0]).team
 })
 
-// Vị trí thi đấu. LƯU Ý: API chỉ trả nhóm TỔNG QUÁT (Attacker/Midfielder/Defender/Goalkeeper),
-// KHÔNG có vị trí cụ thể (CF/RW...). Lấy vị trí ở dòng có nhiều trận nhất rồi dịch VI/EN.
+// Position. NOTE: the API only returns the GENERAL group (Attacker/Midfielder/Defender/Goalkeeper),
+// NOT the specific role (CF/RW...). Take the position from the row with the most appearances, then translate VI/EN.
 const POS_KEY = { Attacker: 'pos_fw', Midfielder: 'pos_mf', Defender: 'pos_df', Goalkeeper: 'pos_gk' }
 const positionLabel = computed(() => {
   const rows = [...clubRows.value, ...nationalRows.value].filter((r) => r.position)
@@ -53,7 +53,7 @@ const positionLabel = computed(() => {
 
 function hideImg(e) { e.target.style.display = 'none' }
 
-// Thêm đơn vị cho chiều cao / cân nặng nếu API trả về số trần (vd "187" -> "187 cm").
+// Add units to height / weight if the API returns a bare number (e.g. "187" -> "187 cm").
 const heightStr = computed(() => {
   const h = player.value?.height
   return h ? (/[a-z]/i.test(h) ? h : `${h} cm`) : ''
@@ -63,13 +63,13 @@ const weightStr = computed(() => {
   return w ? (/[a-z]/i.test(w) ? w : `${w} kg`) : ''
 })
 
-// Mỗi lần đổi cầu thủ tăng seq -> bỏ kết quả của request cũ về muộn (chống "race"
-// khi bấm liên tiếp nhiều cầu thủ, vì career/motm tải chậm).
+// Each player change bumps seq -> drop late results from old requests (race guard
+// when clicking several players in a row, since career/motm load slowly).
 let loadSeq = 0
 
 async function loadPlayer(id) {
   const seq = ++loadSeq
-  // Reset trạng thái để không thấy dữ liệu cầu thủ cũ lúc đang tải cầu thủ mới.
+  // Reset state so the old player's data isn't shown while the new player loads.
   loading.value = true
   data.value = null
   career.value = null
@@ -80,37 +80,37 @@ async function loadPlayer(id) {
   historyLoading.value = true
   try {
     const res = await api.get(`/players/${id}`)
-    if (seq !== loadSeq) return                  // đã chuyển sang cầu thủ khác
+    if (seq !== loadSeq) return                  // already switched to another player
     data.value = res.data.response?.[0] || null
-    setTitle(data.value?.player?.name || null)   // tiêu đề tab = tên cầu thủ
+    setTitle(data.value?.player?.name || null)   // tab title = player name
   } finally {
     if (seq === loadSeq) loading.value = false
   }
-  // Tổng bàn sự nghiệp: gọi sau, không chặn trang (backend phải quét nhiều mùa).
-  // timeout dài hơn mặc định vì cold-cache có thể quét nhiều mùa.
+  // Career goals: called later, doesn't block the page (the backend must scan many seasons).
+  // longer timeout than default because a cold cache may scan many seasons.
   try {
     const c = await api.get(`/players/${id}/career`, { timeout: 60000 })
     if (seq === loadSeq) career.value = c.data
-  } catch (e) { /* bỏ qua */ }
+  } catch (e) { /* ignore */ }
   finally { if (seq === loadSeq) careerLoading.value = false }
-  // POTM mùa này: backend quét ~50 trận -> cold-cache có thể >15s. Cho timeout 60s để
-  // không bị huỷ giữa chừng (lần sau đã cache nên rất nhanh).
+  // POTM this season: the backend scans ~50 matches -> a cold cache can take >15s. Use a 60s timeout so it
+  // isn't cancelled midway (cached afterwards, so very fast).
   try {
     const m = await api.get(`/players/${id}/motm`, { timeout: 60000 })
     if (seq === loadSeq) motm.value = m.data
-  } catch (e) { /* bỏ qua */ }
+  } catch (e) { /* ignore */ }
   finally { if (seq === loadSeq) motmLoading.value = false }
-  // Lịch sử (danh hiệu/chuyển nhượng/chấn thương/mùa): tải sau cùng, quét nhiều mùa -> timeout dài.
+  // History (trophies/transfers/injuries/seasons): loaded last, scans many seasons -> long timeout.
   try {
     const h = await api.get(`/players/${id}/history`, { timeout: 60000 })
     if (seq === loadSeq) history.value = h.data
-  } catch (e) { /* bỏ qua */ }
+  } catch (e) { /* ignore */ }
   finally { if (seq === loadSeq) historyLoading.value = false }
 }
 
-// keep-alive: component bị cache, KHÔNG remount khi đổi cầu thủ. Chỉ tải lại khi đây đúng
-// là trang đang xem (route.name === 'player') VÀ là cầu thủ khác cầu thủ đã tải -> tránh
-// tải nhầm khi bị cache, và tránh tải lại (mất vị trí cuộn) khi back về đúng cầu thủ cũ.
+// keep-alive: the component is cached, NOT remounted when changing player. Only reload when this really
+// is the page being viewed (route.name === 'player') AND it's a different player from the one loaded -> avoids
+// loading by mistake while cached, and avoids reloading (losing scroll position) when going back to the same player.
 let loadedId = null
 function syncPlayer() {
   if (route.name !== 'player') return
@@ -121,7 +121,7 @@ function syncPlayer() {
 }
 onMounted(syncPlayer)
 watch(() => route.params.id, syncPlayer)
-// keep-alive: quay lại trang đã cache -> đặt lại tiêu đề tab theo cầu thủ đang xem.
+// keep-alive: returning to a cached page -> reset the tab title to the current player.
 onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || null) })
 </script>
 
@@ -132,7 +132,7 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
   <div v-else-if="!player" class="center">{{ $t('playerNoData') }}</div>
 
   <div v-else>
-    <!-- ẢNH MẶT CẦU THỦ -->
+    <!-- PLAYER PHOTO -->
     <div class="player-hero">
       <img loading="lazy" :src="player.photo" class="photo" @error="imgFallback" />
       <div>
@@ -149,7 +149,7 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
       </div>
     </div>
 
-    <!-- TỔNG BÀN THẮNG SỰ NGHIỆP (chính thức, mọi CLB + ĐTQG) -->
+    <!-- CAREER GOALS TOTAL (official, all clubs + national team) -->
     <div v-if="career && career.goals" class="career-card">
       <div class="career-num">{{ career.goals }}</div>
       <div class="career-text">
@@ -158,7 +158,7 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
         <div class="career-sub" v-else>{{ $t('careerSub') }} · {{ career.seasons }} {{ $t('seasonsWord') }}</div>
       </div>
     </div>
-    <!-- Placeholder lúc đang tải (backend quét nhiều mùa, có thể vài chục giây lần đầu) -->
+    <!-- Placeholder while loading (the backend scans many seasons, can take tens of seconds the first time) -->
     <div v-else-if="careerLoading" class="career-card is-loading">
       <div class="career-num">…</div>
       <div class="career-text">
@@ -167,7 +167,7 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
       </div>
     </div>
 
-    <!-- CẦU THỦ HAY NHẤT TRẬN (POTM) — tự tính, mùa đang xem -->
+    <!-- PLAYER OF THE MATCH (POTM) — computed by us, for the season being viewed -->
     <div v-if="motm && motm.scanned > 0" class="career-card potm-card">
       <div class="career-num">{{ motm.motm }}</div>
       <div class="career-text">
@@ -183,7 +183,7 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
       </div>
     </div>
 
-    <!-- THỐNG KÊ CẤP CLB — tách theo từng giải -->
+    <!-- CLUB STATS — split by competition -->
     <div v-if="clubRows.length">
       <h3 class="stat-group">{{ clubTeamName }}</h3>
       <div class="comp-wrap">
@@ -237,7 +237,7 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
       </div>
     </div>
 
-    <!-- THỐNG KÊ CẤP ĐỘI TUYỂN QUỐC GIA — tách theo từng giải (chỉ hiện khi có) -->
+    <!-- NATIONAL TEAM STATS — split by competition (only shown when present) -->
     <div v-if="nationalRows.length">
       <h3 class="stat-group">{{ player.nationality }} <span class="natl-tag">{{ $t('nationalTeam') }}</span></h3>
       <div class="comp-wrap">
@@ -291,7 +291,7 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
       </div>
     </div>
 
-    <!-- LỊCH SỬ: danh hiệu + thống kê theo mùa + chuyển nhượng + chấn thương -->
+    <!-- HISTORY: trophies + per-season stats + transfers + injuries -->
     <PlayerHistory :history="history || {}" :loading="historyLoading" />
   </div>
 </template>
@@ -315,7 +315,7 @@ onActivated(() => { if (route.name === 'player') setTitle(player.value?.name || 
   padding: 1px 6px;
 }
 
-/* Bảng thống kê theo giải */
+/* Per-competition stats table */
 .comp-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);

@@ -1,11 +1,11 @@
 """
-Client gọi API-Football.
-- Giấu API key (key chỉ nằm ở backend, frontend không bao giờ thấy).
-- Cache mỗi response theo TTL để tiết kiệm quota.
-- Nếu USE_MOCK = true -> trả dữ liệu mẫu, không gọi mạng.
+Client for calling API-Football.
+- Hides the API key (the key only lives in the backend; the frontend never sees it).
+- Caches every response with a TTL to save quota.
+- If USE_MOCK = true -> return sample data without any network calls.
 
-Mọi hàm trả về list nằm trong field "response" của API-Football,
-để frontend xử lý đồng nhất dù là mock hay dữ liệu thật.
+Every function returns the list inside API-Football's "response" field,
+so the frontend handles mock and real data the same way.
 """
 import asyncio
 import copy
@@ -21,19 +21,19 @@ import mock_data
 
 cache = TTLCache(settings.cache_ttl_seconds)
 
-# ===== TTL phân tầng (giây) =====
-# Mục tiêu: live tươi ~30s; dữ liệu tĩnh cache lâu để giảm tối đa số lần gọi API.
-# Vì cache DÙNG CHUNG cho mọi user, 100 người cùng xem cũng chỉ tốn 1 request / TTL / cache key.
-# API-Football tự làm tươi dữ liệu live mỗi 15s -> đặt 15s là "không trễ" tối đa có thể;
-# poll nhanh hơn 15s KHÔNG có dữ liệu mới hơn, chỉ tốn request vô ích.
-LIVE_TTL = 15          # trận hôm nay / đang đá / sự kiện + thống kê live
-UPCOMING_TTL = 1800    # trận sắp đá (30 phút): giờ, đội hình dự kiến ít đổi
-STATIC_TTL = 21600     # standings, cầu thủ, đội, lịch sử, h2h, top scorer (6 giờ) - gần như không đổi
-LEAGUES_TTL = 86400    # danh sách giải (cho ô tìm kiếm): gần như không đổi -> cache 24 giờ
+# ===== Tiered TTLs (seconds) =====
+# Goal: keep live data fresh (~30s) and cache static data for a long time to minimise API calls.
+# The cache is SHARED by all users, so 100 people watching still cost only 1 request / TTL / cache key.
+# API-Football refreshes live data every 15s -> 15s is the lowest useful delay;
+# polling faster than 15s gets NO newer data and just wastes requests.
+LIVE_TTL = 15          # today's / live fixtures, live events and statistics
+UPCOMING_TTL = 1800    # upcoming fixtures (30 minutes): kick-off time and expected line-ups rarely change
+STATIC_TTL = 21600     # standings, players, teams, history, h2h, top scorers (6 hours): almost never change
+LEAGUES_TTL = 86400    # league list (for the search box): almost never changes -> cache for 24 hours
 
 
 def _today_in_tz(tz: Optional[str]) -> str:
-    """Ngày 'hôm nay' (YYYY-MM-DD) theo múi giờ tz. Lỗi/không có tz -> dùng giờ local server."""
+    """'Today' (YYYY-MM-DD) in timezone tz. On error or missing tz -> use the server's local time."""
     if tz:
         try:
             from zoneinfo import ZoneInfo
@@ -44,7 +44,7 @@ def _today_in_tz(tz: Optional[str]) -> str:
 
 
 def _fixtures_ttl(date: Optional[str], timezone: Optional[str]) -> int:
-    """Chọn TTL cho danh sách trận theo ngày: hôm nay = live ngắn, tương lai = vừa, quá khứ = dài."""
+    """Pick the TTL for a date's fixture list: today = short (live), future = medium, past = long."""
     if not date:
         return LIVE_TTL
     today = _today_in_tz(timezone)
@@ -52,9 +52,9 @@ def _fixtures_ttl(date: Optional[str], timezone: Optional[str]) -> int:
         return LIVE_TTL
     if date > today:
         return UPCOMING_TTL
-    return STATIC_TTL  # ngày đã qua -> kết quả cố định
+    return STATIC_TTL  # past date -> results are final
 
-# Đổi URL + header theo cách đăng ký (dashboard trực tiếp hay qua RapidAPI).
+# Switch URL and headers depending on the subscription type (direct dashboard or via RapidAPI).
 if settings.api_football_via == "rapidapi":
     BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
     HEADERS = {
@@ -80,9 +80,9 @@ async def _request(path: str, params: Optional[dict] = None, ttl: Optional[int] 
         resp.raise_for_status()
         data = resp.json()
 
-    # API-Football trả HTTP 200 kèm field `errors` khi bị rate-limit (vd quá nhiều request
-    # mỗi phút) -> response rỗng. TUYỆT ĐỐI KHÔNG cache response lỗi, nếu không số liệu rỗng
-    # sẽ bị "đóng băng" 6h và làm sai thống kê (vd đếm MOTM thiếu trận). errors = [] khi OK.
+    # API-Football returns HTTP 200 with an `errors` field when rate-limited (e.g. too many requests
+    # per minute) -> empty response. NEVER cache an error response, otherwise the empty data
+    # would be 'frozen' for 6h and break statistics (e.g. missing MOTM matches). errors = [] when OK.
     if not data.get("errors"):
         cache.set(cache_key, data, ttl)
     return data
@@ -99,7 +99,7 @@ async def get_fixtures(date=None, league=None, season=None, timezone=None) -> li
     if season:
         params["season"] = season
     if timezone:
-        params["timezone"] = timezone  # API trả lịch + giờ theo múi giờ người xem
+        params["timezone"] = timezone  # The API returns fixtures and kick-off times in the viewer's timezone
     data = await _request("/fixtures", params, ttl=_fixtures_ttl(date, timezone))
     return data.get("response", [])
 
@@ -107,7 +107,7 @@ async def get_fixtures(date=None, league=None, season=None, timezone=None) -> li
 async def get_fixture(fixture_id: int) -> list:
     if settings.use_mock:
         return mock_data.fixture_by_id(fixture_id)
-    # Trận đơn: có thể đang đá -> cache ngắn để frontend (poll 30s khi live) thấy tỉ số mới.
+    # Single fixture: may be live -> short cache so the frontend (polling 30s while live) sees new scores.
     data = await _request("/fixtures", {"id": fixture_id}, ttl=LIVE_TTL)
     return data.get("response", [])
 
@@ -127,7 +127,7 @@ async def get_team(team_id: int) -> list:
     if not base:
         return []
     item = base[0]  # {team, venue}
-    # Lấy thêm squad từ endpoint riêng để trang đội có danh sách cầu thủ.
+    # Fetch the squad from a separate endpoint so the team page has a player list.
     try:
         sq = await _request("/players/squads", {"team": team_id}, ttl=STATIC_TTL)
         squad_resp = sq.get("response", [])
@@ -143,12 +143,12 @@ async def get_team(team_id: int) -> list:
 
 
 async def _team_primary_league(team_id: int, season: int):
-    """Dò giải ĐẤU CHÍNH (VĐQG) của đội ở mùa cho trước -> (league_id, name, logo).
-    Ưu tiên type='League'; không có thì lấy giải đầu tiên. (None, None, None) nếu trống."""
+    """Find the team's MAIN league (domestic league) for a given season -> (league_id, name, logo).
+    Prefer type='League'; otherwise take the first league. (None, None, None) if empty."""
     data = await _request("/leagues", {"team": team_id, "season": season}, ttl=STATIC_TTL)
     leagues = data.get("response", [])
     pick = None
-    is_league = False  # True nếu tìm được giải VĐQG thật (đội CLB); False = đội tuyển (chỉ cúp)
+    is_league = False  # True if a real domestic league was found (club); False = national team (cups only)
     for lg in leagues:
         if ((lg.get("league") or {}).get("type") or "").lower() == "league":
             pick = lg["league"]
@@ -162,8 +162,8 @@ async def _team_primary_league(team_id: int, season: int):
 
 
 async def get_team_statistics(team_id: int) -> dict:
-    """Thống kê mùa của đội ở giải VĐQG: phong độ, thắng/hòa/thua, bàn TB, sạch lưới, chuỗi...
-    Tự dò giải + mùa (thử mùa trước nếu đầu mùa chưa có). {} nếu không có dữ liệu."""
+    """Team season statistics in the domestic league: form, wins/draws/losses, average goals, clean sheets, streaks...
+    Auto-detect league + season (try the previous season if the new one has no data yet). {} if no data."""
     if settings.use_mock:
         return {}
     season = config.default_season()
@@ -173,9 +173,9 @@ async def get_team_statistics(team_id: int) -> dict:
         lid, lname, llogo, is_league = await _team_primary_league(team_id, season)
     if not lid:
         return {}
-    # ĐỘI TUYỂN (không có giải VĐQG) đang dự World Cup: ưu tiên thống kê World Cup ĐANG diễn ra,
-    # thay vì giải mùa trước (Euro/Nations League) mà heuristic chọn nhầm. CLB (is_league=True)
-    # bỏ qua nhánh này nên KHÔNG tốn thêm request và giữ nguyên hành vi cũ.
+    # NATIONAL TEAM (no domestic league) playing at the World Cup: prefer statistics from the CURRENT World Cup
+    # instead of last season's tournament (Euro/Nations League) that the heuristic may pick. Clubs (is_league=True)
+    # skip this branch, so there are NO extra requests and the old behaviour is unchanged.
     if not is_league:
         wc_season = config.LEAGUE_SEASON.get(1)
         if wc_season:
@@ -200,8 +200,8 @@ async def get_team_statistics(team_id: int) -> dict:
 
 
 async def get_team_injuries(team_id: int) -> list:
-    """Danh sách cầu thủ chấn thương/treo giò của đội (mùa hiện tại), gộp theo cầu thủ
-    (giữ bản ghi mới nhất). [] nếu không có."""
+    """Team's injured/suspended players (current season), grouped by player
+    (keep the latest record). [] if none."""
     if settings.use_mock:
         return []
     season = config.default_season()
@@ -226,7 +226,7 @@ async def get_team_injuries(team_id: int) -> list:
 
 
 async def get_team_insights(team_id: int) -> dict:
-    """Gộp thống kê mùa + danh sách chấn thương của đội trong 1 lần gọi (song song)."""
+    """Combine team season stats + injury list in one call (fetched in parallel)."""
     if settings.use_mock:
         return {"statistics": {}, "injuries": []}
     statistics, injuries = await asyncio.gather(
@@ -236,24 +236,24 @@ async def get_team_insights(team_id: int) -> dict:
     return {"statistics": statistics, "injuries": injuries}
 
 
-# ========================= GHI ĐÈ THỐNG KÊ THỦ CÔNG =========================
-# API-Football đôi khi trả SAI hoặc THIẾU một dòng giải (vd King's Cup Saudi trả số
-# CỘNG DỒN nhiều mùa: Ronaldo 16 trận/14 bàn, lại còn league.id = null nên mất logo).
-# Bảng này sửa thủ công các dòng đó theo nguồn chính thức.
-# Khoá = (player_id, season). Mỗi rule khớp giải theo `match` (so khớp tên giải, chữ
-# thường, dạng "chứa") rồi GHI ĐÈ các field cho sẵn (dict thì merge, còn lại gán đè).
-# Đặt None cho field KHÔNG xác thực được -> frontend hiện "—" thay vì số bịa.
-# Nguồn King's Cup 2025/26: Al-Nassr bị loại vòng 1/16 -> Ronaldo đá 1 trận, 0 bàn
-# (Wikipedia "2025–26 Al-Nassr FC season", bảng số trận theo giải).
+# ========================= MANUAL STATISTICS OVERRIDES =========================
+# API-Football sometimes returns WRONG or MISSING league rows (e.g. the Saudi King's Cup returns
+# CUMULATIVE numbers across seasons: Ronaldo 16 apps/14 goals, and league.id = null so the logo is lost).
+# This table manually fixes those rows using official sources.
+# Key = (player_id, season). Each rule matches a league by `match` (league name, lowercase,
+# 'contains' match) and OVERWRITES the given fields (dicts are merged, other values replaced).
+# Set None for fields that cannot be verified -> the frontend shows a dash instead of a made-up number.
+# Source for King's Cup 2025/26: Al-Nassr were knocked out in the round of 32 -> Ronaldo played 1 match, 0 goals
+# (Wikipedia "2025–26 Al-Nassr FC season", appearances by competition table).
 _MEDIA = "https://media.api-sports.io/football"
 
-# Mỗi mục = {(player_id, season): {"patch": [...], "add": [...]}}
-#  - patch: SỬA dòng giải đã có (khớp tên giải, chữ thường, dạng "chứa"); dict thì merge,
-#           còn lại gán đè. Đặt None cho field không xác thực được -> frontend hiện "—".
-#  - add:   CHÈN dòng giải mà API thiếu hẳn (kèm league id+logo để có icon).
-# Nguồn số liệu: bảng thống kê chính thức mùa 2025/26 (Pro League 30/28/3, ACL Two 4/1/1,
-# Super Cup 2/1/1, King's Cup 1/0/0). API trả: assists Pro League thiếu, ACL Two thiếu
-# trận+bàn, King's Cup cộng dồn sai + mất id/logo, và THIẾU HẲN Super Cup.
+# Each entry = {(player_id, season): {"patch": [...], "add": [...]}}
+#  - patch: FIX an existing league row (league name, lowercase, 'contains' match); dicts are merged,
+#           other values replaced. Set None for unverifiable fields -> the frontend shows a dash.
+#  - add:   INSERT a league row that the API is missing (with league id + logo for the icon).
+# Data source: official 2025/26 statistics (Pro League 30/28/3, ACL Two 4/1/1,
+# Super Cup 2/1/1, King's Cup 1/0/0). API issues: Pro League assists missing, ACL Two missing
+# apps + goals, King's Cup wrongly cumulative + missing id/logo, and Super Cup COMPLETELY missing.
 STAT_OVERRIDES = {
     (874, 2025): {  # Cristiano Ronaldo — Al-Nassr
         "patch": [
@@ -268,7 +268,7 @@ STAT_OVERRIDES = {
              "cards": {"yellow": 0, "red": 0}},
         ],
         "add": [
-            {  # Saudi Super Cup (id 826) — API không có dòng này cho mùa 2025
+            {  # Saudi Super Cup (id 826): the API has no row for the 2025 season
                 "team": {"id": 2939, "name": "Al-Nassr", "logo": f"{_MEDIA}/teams/2939.png"},
                 "league": {"id": 826, "name": "Saudi Super Cup", "season": 2025,
                            "country": "Saudi-Arabia", "logo": f"{_MEDIA}/leagues/826.png"},
@@ -284,13 +284,13 @@ STAT_OVERRIDES = {
 
 
 def _apply_stat_overrides(player_id: int, season: int, resp: list) -> list:
-    """PATCH các dòng giải đã có + ADD các dòng API thiếu (theo STAT_OVERRIDES)."""
+    """PATCH existing league rows + ADD rows the API is missing (based on STAT_OVERRIDES)."""
     rule = STAT_OVERRIDES.get((player_id, season))
     if not resp or not rule:
         return resp
-    # QUAN TRỌNG: deep-copy trước khi sửa. resp là object NẰM TRONG CACHE, dùng chung với
-    # _sum_official_goals (tính career goals) và get_player_motm. Nếu sửa tại chỗ sẽ làm
-    # hỏng các số đó (vd career goals bị tụt). Chỉ sửa trên bản sao để trả riêng cho get_player.
+    # IMPORTANT: deep-copy before editing. resp is an object STORED IN THE CACHE and shared with
+    # _sum_official_goals (career goals) and get_player_motm. Editing it in place would
+    # corrupt those numbers (e.g. career goals dropping). Only edit a copy returned by get_player.
     resp = copy.deepcopy(resp)
     stats = resp[0].setdefault("statistics", [])
 
@@ -310,7 +310,7 @@ def _apply_stat_overrides(player_id: int, season: int, resp: list) -> list:
                 else:
                     st[key] = val
 
-    # ADD (bỏ qua nếu giải đã xuất hiện -> tránh chèn trùng khi gọi lại trên cache)
+    # ADD (skip if the league is already present -> avoids duplicates when called again on cached data)
     have_ids = {(s.get("league") or {}).get("id") for s in stats}
     have_names = {((s.get("league") or {}).get("name") or "").lower() for s in stats}
     for entry in rule.get("add", []):
@@ -323,10 +323,10 @@ def _apply_stat_overrides(player_id: int, season: int, resp: list) -> list:
 
 
 async def _merge_world_cup_stats(player_id: int, resp: list) -> list:
-    """Gộp thêm thống kê WORLD CUP (đội tuyển, mùa 2026) vào hồ sơ cầu thủ. WC nằm ở mùa CALENDAR
-    2026, KHÔNG có trong mùa CLB châu Âu (default 2025) -> nếu không gộp thì bảng thiếu mục đội
-    tuyển (vd Mbappé ghi bàn WC nhưng không hiện). Đội KHÔNG dự WC -> không có dòng nào -> giữ
-    nguyên. Frontend tự xếp mục World Cup vào nhóm ĐTQG (splitStats)."""
+    """Merge WORLD CUP statistics (national team, 2026 season) into the player profile. The World Cup is in CALENDAR season
+    2026, NOT in the European club season (default 2025) -> without merging, the national team section
+    would be missing (e.g. Mbappé scores at the World Cup but it is not shown). Teams NOT at the World Cup -> no rows -> unchanged.
+    The frontend places the World Cup entry in the national team group (splitStats)."""
     wc_season = config.LEAGUE_SEASON.get(1)
     if not resp or not wc_season:
         return resp
@@ -339,28 +339,28 @@ async def _merge_world_cup_stats(player_id: int, resp: list) -> list:
     wc_entries = [s for s in wc_stats if ((s.get("league") or {}).get("id")) == 1]
     if not wc_entries:
         return resp
-    resp = copy.deepcopy(resp)  # KHÔNG sửa object trong cache (dùng chung với career/motm)
+    resp = copy.deepcopy(resp)  # Do NOT modify the cached object (shared with career/motm)
     stats = resp[0].setdefault("statistics", [])
     have = {((s.get("team") or {}).get("id"), (s.get("league") or {}).get("id")) for s in stats}
     for e in wc_entries:
         key = ((e.get("team") or {}).get("id"), (e.get("league") or {}).get("id"))
-        if key not in have:  # tránh chèn trùng nếu đã có
+        if key not in have:  # avoid inserting a duplicate if it already exists
             stats.append(e)
     return resp
 
 
 async def get_player(player_id: int, season: int = 2025) -> list:
-    # Chỉ trả dữ liệu của ĐÚNG mùa đang xem. Frontend tự tách CLB vs ĐTQG;
-    # nếu mùa đó không có trận ĐTQG thì phần đội tuyển để trống (không lấy mùa khác).
+    # Only return data for the season being viewed. The frontend splits club vs national team;
+    # if that season has no national team matches, the national team section stays empty (no other season is used).
     if settings.use_mock:
         return mock_data.player_by_id(player_id)
     data = await _request("/players", {"id": player_id, "season": season}, ttl=STATIC_TTL)
     resp = data.get("response", [])
 
-    # ===== Giải chạy theo NĂM DƯƠNG LỊCH (MLS...) =====
-    # Default `season` (vd 2025) là mùa giải CHÂU ÂU (25/26). Nhưng MLS chạy tháng 1–12,
-    # nên "mùa hiện tại" của cầu thủ Inter Miami là NĂM NAY (2026), không phải 2025.
-    # Nếu cầu thủ có đá giải năm-dương-lịch ở mùa default -> lấy lại nguyên dữ liệu mùa = năm nay.
+    # ===== Leagues that run on the CALENDAR YEAR (MLS...) =====
+    # The default `season` (e.g. 2025) is the EUROPEAN season (25/26). But MLS runs January to December,
+    # so the 'current season' for an Inter Miami player is THIS YEAR (2026), not 2025.
+    # If the player plays in a calendar-year league in the default season -> reload all data for season = this year.
     cur_year = datetime.now().year
     if resp and cur_year != season:
         stats = resp[0].get("statistics", [])
@@ -374,22 +374,22 @@ async def get_player(player_id: int, season: int = 2025) -> list:
                     "/players", {"id": player_id, "season": cur_year}, ttl=STATIC_TTL
                 )
                 cy_resp = cy.get("response", [])
-                # Chỉ thay khi mùa năm nay thật sự có dữ liệu (tránh trả rỗng đầu năm).
+                # Only switch if this year's season actually has data (avoid returning empty results early in the year).
                 if cy_resp and cy_resp[0].get("statistics"):
                     return _apply_stat_overrides(player_id, cur_year, cy_resp)
             except Exception:
                 pass
-    # CLB châu Âu (mùa default 2025): gộp thêm thống kê World Cup mùa 2026 để hiện mục đội tuyển.
+    # European clubs (default season 2025): also merge 2026 World Cup stats to show the national team section.
     resp = await _merge_world_cup_stats(player_id, resp)
     return _apply_stat_overrides(player_id, season, resp)
 
 
-# Đội trẻ / Olympic -> KHÔNG tính vào "official" (bảng official chỉ tính tuyển A + CLB).
+# Youth / Olympic teams -> NOT counted as 'official' (official totals only count senior national team + club).
 _YOUTH_KEYWORDS = ("u15", "u16", "u17", "u18", "u19", "u20", "u21", "u23", "olympic", "youth")
 
 
 def _is_official_goal_entry(stat: dict) -> bool:
-    """Mục được tính vào tổng official: KHÔNG phải giao hữu, KHÔNG phải đội trẻ/Olympic."""
+    """Entries counted in the official total: NOT friendlies and NOT youth/Olympic teams."""
     team = ((stat.get("team") or {}).get("name") or "").lower()
     league = ((stat.get("league") or {}).get("name") or "").lower()
     if "friendl" in league:
@@ -398,12 +398,12 @@ def _is_official_goal_entry(stat: dict) -> bool:
 
 
 async def _sum_official_goals(player_id: int, seasons: list) -> int:
-    """Cộng bàn official (CLB + tuyển A, bỏ giao hữu/đội trẻ) qua các mùa cho trước.
-    ÁP DỤNG STAT_OVERRIDES trước khi cộng để tổng career KHỚP với BẢNG hiển thị từng giải.
-    Vì sao cần: có dòng API trả sai (vd King's Cup của Ronaldo bị GỘP cộng dồn ~14 bàn ma,
-    override sửa về 0) hoặc THIẾU (vd Super Cup, override ADD 1 bàn). Nếu đọc thô, career bị
-    thổi phồng/lệch so với bảng. Override chỉ tác động khi có rule (player_id, season) -> cầu
-    thủ khác không bị ảnh hưởng."""
+    """Sum official goals (club + senior national team, excluding friendlies/youth) across the given seasons.
+    APPLY STAT_OVERRIDES before summing so the career total MATCHES the per-league table shown.
+    Why: some API rows are wrong (e.g. Ronaldo's King's Cup is cumulative with ~14 phantom goals,
+    the override fixes it to 0) or MISSING (e.g. Super Cup, the override ADDS 1 goal). Read raw, the career total would be
+    inflated or inconsistent with the table. Overrides only apply when a (player_id, season) rule exists -> other
+    players are not affected."""
     total = 0
     for s in seasons:
         try:
@@ -411,7 +411,7 @@ async def _sum_official_goals(player_id: int, seasons: list) -> int:
             resp = data.get("response", [])
         except Exception:
             continue
-        resp = _apply_stat_overrides(player_id, s, resp)   # sửa/thêm dòng giải như bảng hiển thị
+        resp = _apply_stat_overrides(player_id, s, resp)   # fix/add league rows exactly like the displayed table
         for st in (resp[0].get("statistics", []) if resp else []):
             if _is_official_goal_entry(st):
                 total += (st.get("goals") or {}).get("total") or 0
@@ -419,9 +419,9 @@ async def _sum_official_goals(player_id: int, seasons: list) -> int:
 
 
 async def get_player_career(player_id: int) -> dict:
-    """Tổng bàn thắng official cả sự nghiệp.
-    - Nếu có MỐC nhập tay (config.CAREER_BASELINE): dùng mốc official + tự cộng bàn các mùa SAU mốc.
-    - Nếu không: cộng dồn toàn bộ các mùa qua API (có thể lệch số official 'chuẩn')."""
+    """Total official career goals.
+    - If a manual BASELINE exists (config.CAREER_BASELINE): use the official baseline + add goals from seasons AFTER it.
+    - Otherwise: sum all seasons from the API (may differ from the 'official' number)."""
     if settings.use_mock:
         return {"goals": 0, "source": "mock"}
 
@@ -445,10 +445,10 @@ async def get_player_career(player_id: int) -> dict:
     return {"goals": total, "seasons": len(seasons), "source": "api"}
 
 
-# Cúp GIAO HỮU / BIỂU DIỄN tiền mùa giải + giải TRẺ -> KHÔNG tính là danh hiệu thật.
-# (vd "Trofeo Joan Gamper", "Copa Catalunya" của Messi; "UEFA U19" của Mbappé.)
-# Lưu ý: "Trophée des Champions" (Siêu cúp Pháp) KHÁC "Trofeo ..." (giao hữu Tây Ban Nha)
-# nên match "trofeo" an toàn, không đụng cúp Pháp. GIỮ Olympic vì là danh hiệu thật.
+# Pre-season FRIENDLY / EXHIBITION cups + YOUTH tournaments -> NOT counted as real trophies.
+# (e.g. Messi's "Trofeo Joan Gamper", "Copa Catalunya"; Mbappé's "UEFA U19".)
+# Note: "Trophée des Champions" (French Super Cup) is DIFFERENT from "Trofeo ..." (Spanish friendlies),
+# so matching "trofeo" is safe and does not affect the French cup. KEEP the Olympics because it is a real trophy.
 _EXHIBITION_TROPHY_KW = (
     "trofeo", "catalunya", "audi cup", "emirates cup", "international champions cup",
     "florida cup", "berlusconi", "eusebio", "eusébio", "amsterdam tournament",
@@ -463,10 +463,10 @@ def _is_exhibition_trophy(league: str) -> bool:
 
 
 async def get_player_trophies(player_id: int) -> list:
-    """Danh hiệu cả sự nghiệp. API-Football /trophies.
-    Làm sạch: BỎ bản ghi thiếu mùa (season rỗng -> entry lỗi của API, gây đếm thừa,
-    vd Ronaldo bị +1 'UEFA Champions League' ảo) và KHỬ TRÙNG LẶP theo
-    (quốc gia|giải|mùa|hạng). [] nếu không có."""
+    """Career trophies. API-Football /trophies.
+    Clean-up: DROP records without a season (empty season -> API error entry that causes double counting,
+    e.g. Ronaldo getting a phantom +1 'UEFA Champions League') and REMOVE DUPLICATES by
+    (country|league|season|place). [] if none."""
     if settings.use_mock:
         return []
     data = await _request("/trophies", {"player": player_id}, ttl=STATIC_TTL)
@@ -474,21 +474,21 @@ async def get_player_trophies(player_id: int) -> list:
     seen = set()
     out = []
     for t in resp:
-        season = str(t.get("season") or "").strip()  # ép str: phòng khi API trả season dạng số
+        season = str(t.get("season") or "").strip()  # force str: in case the API returns season as a number
         if not season:
-            continue  # bản ghi thiếu mùa -> dữ liệu rác, bỏ
+            continue  # record without a season -> junk data, drop it
         if _is_exhibition_trophy(t.get("league")):
-            continue  # cúp giao hữu/biểu diễn hoặc giải trẻ -> KHÔNG tính là danh hiệu
+            continue  # friendly/exhibition cup or youth tournament -> NOT counted as a trophy
         key = (t.get("country") or "", t.get("league") or "", season, t.get("place") or "")
         if key in seen:
-            continue  # trùng -> bỏ
+            continue  # duplicate -> drop
         seen.add(key)
         out.append(t)
     return out
 
 
 async def get_player_transfers(player_id: int) -> list:
-    """Lịch sử chuyển nhượng (danh sách {date, type, teams:{in,out}}). [] nếu không có."""
+    """Transfer history (list of {date, type, teams:{in,out}}). [] if none."""
     if settings.use_mock:
         return []
     data = await _request("/transfers", {"player": player_id}, ttl=STATIC_TTL)
@@ -497,7 +497,7 @@ async def get_player_transfers(player_id: int) -> list:
 
 
 async def get_player_sidelined(player_id: int) -> list:
-    """Lịch sử chấn thương / treo giò (danh sách {type, start, end}). [] nếu không có."""
+    """Injury / suspension history (list of {type, start, end}). [] if none."""
     if settings.use_mock:
         return []
     data = await _request("/sidelined", {"player": player_id}, ttl=STATIC_TTL)
@@ -505,8 +505,8 @@ async def get_player_sidelined(player_id: int) -> list:
 
 
 async def get_player_season_stats(player_id: int, limit: int = 10) -> list:
-    """Bảng thống kê theo TỪNG MÙA (gộp mọi giải trong mùa): số trận / bàn / kiến tạo + đội chính.
-    Lấy tối đa `limit` mùa gần nhất, gọi SONG SONG cho nhanh; mỗi mùa cache 6h."""
+    """Statistics PER SEASON (all competitions combined): apps / goals / assists + main team.
+    Fetch at most `limit` recent seasons IN PARALLEL for speed; each season is cached for 6h."""
     if settings.use_mock:
         return []
     seasons_resp = await _request("/players/seasons", {"player": player_id}, ttl=STATIC_TTL)
@@ -522,10 +522,10 @@ async def get_player_season_stats(player_id: int, limit: int = 10) -> list:
         if not stats:
             return None
         apps = goals = assists = 0
-        team_apps = {}  # tên đội -> số trận, để chọn đội chơi nhiều nhất làm nhãn
-        seen = set()    # (đội|giải) đã cộng -> tránh API trả trùng mục gây cộng dư
+        team_apps = {}  # team name -> apps, to pick the most-played team as the label
+        seen = set()    # (team|league) already counted -> avoids double counting when the API returns duplicates
         for st in stats:
-            # Bỏ giao hữu + đội trẻ/Olympic (giống cách tính bàn official) -> số liệu sạch, nhất quán.
+            # Exclude friendlies + youth/Olympic teams (same as the official goals logic) -> clean, consistent numbers.
             if not _is_official_goal_entry(st):
                 continue
             tname = (st.get("team") or {}).get("name")
@@ -542,7 +542,7 @@ async def get_player_season_stats(player_id: int, limit: int = 10) -> list:
             if tname:
                 team_apps[tname] = team_apps.get(tname, 0) + a
         if not team_apps:
-            return None  # mùa chỉ có giao hữu/đội trẻ -> bỏ, không hiện dòng rỗng
+            return None  # season with only friendlies/youth -> skip, do not show an empty row
         team = max(team_apps, key=team_apps.get)
         return {"season": season, "team": team, "apps": apps, "goals": goals, "assists": assists}
 
@@ -551,8 +551,8 @@ async def get_player_season_stats(player_id: int, limit: int = 10) -> list:
 
 
 async def get_player_history(player_id: int) -> dict:
-    """Gộp 4 phần lịch sử của cầu thủ trong 1 lần gọi (tải song song):
-    danh hiệu + chuyển nhượng + chấn thương + thống kê theo mùa."""
+    """Combine 4 parts of a player's history in one call (fetched in parallel):
+    trophies + transfers + injuries + per-season statistics."""
     if settings.use_mock:
         return {"trophies": [], "transfers": [], "sidelined": [], "seasons": []}
     trophies, transfers, sidelined, seasons = await asyncio.gather(
@@ -564,23 +564,23 @@ async def get_player_history(player_id: int) -> dict:
     return {"trophies": trophies, "transfers": transfers, "sidelined": sidelined, "seasons": seasons}
 
 
-# NEO THỦ CÔNG cho 'Cầu thủ hay nhất trận'.
-# API-Football KHÔNG có giải "Man of the Match" chính thức, nên cách tự tính (rating cao
-# nhất trận) có thể thấp hơn số MOTM chính thức thực tế (vd Ronaldo mùa 2025/26 có 8 MOTM
-# chính thức của Saudi Pro League nhưng tính theo rating ra 0).
-# Neo tay theo (player_id, season): {"base": số MOTM tính tới ngày "since", "since": ngày neo}.
-# Hiển thị = base + số MOTM ở các trận đá SAU ngày "since" (tính theo rating như bình thường).
-# -> Số neo là "sàn", và TỰ ĐỘNG cộng thêm khi có trận mới được MOTM.
+# MANUAL ANCHORS for 'Player of the Match'.
+# API-Football has NO official 'Man of the Match' award, so our own calculation (highest
+# rating in the match) can be lower than the real official MOTM count (e.g. Ronaldo had 8 official MOTM
+# awards in the 2025/26 Saudi Pro League, but the rating-based count gives 0).
+# Manual anchor per (player_id, season): {"base": MOTM count up to the "since" date, "since": anchor date}.
+# Displayed = base + MOTM awards in matches played AFTER "since" (calculated by rating as usual).
+# -> The anchor is a 'floor' and AUTOMATICALLY increases when a new MOTM is earned.
 MOTM_ANCHORS = {
-    # Mùa 2026/27: KHÔNG neo base -> POTM tự tính TRỌN mùa từ 0 (since=None: quét hết trận mùa
-    # 2026), tự tăng khi có MOTM mới. Neo cũ (Ronaldo base 8 / Messi base 4) là của mùa 2025/26
-    # ĐÃ XONG -> bỏ đi, nếu giữ + đổi khoá sang 2026 sẽ cộng dồn dư 8/4 vào mùa mới.
-    # Muốn neo lại về sau: thêm {(player_id, 2026): {"base": N, "since": "YYYY-MM-DD"}}.
+    # Season 2026/27: NO base anchor -> POTM is calculated for the WHOLE season from 0 (since=None: scan all
+    # 2026 matches) and increases with each new MOTM. The old anchors (Ronaldo base 8 / Messi base 4) were for 2025/26,
+    # which is FINISHED -> removed; keeping them with the key changed to 2026 would add an extra 8/4 to the new season.
+    # To anchor again later: add {(player_id, 2026): {"base": N, "since": "YYYY-MM-DD"}}.
 }
 
-# Cầu thủ tính MOTM theo "ĐỘI NHÀ" (rating cao nhất TRONG đội của cầu thủ ở trận đó).
-# MẶC ĐỊNH mọi người khác tính theo "CẢ 2 ĐỘI" (phải cao nhất trong tất cả cầu thủ trên
-# sân). Lý do: ở đội yếu/giải nhẹ (vd Messi ở MLS) cách "đội nhà" cho số cao bất thường.
+# Players whose MOTM is calculated within their OWN TEAM (highest rating IN the player's team in that match).
+# By DEFAULT everyone else is calculated across BOTH TEAMS (must be the highest of all players on the
+# pitch). Reason: in weaker teams/leagues (e.g. Messi in MLS) the 'own team' method gives unusually high numbers.
 MOTM_TEAM_SCOPED = {
     (583, 2026),   # João Félix
     (278, 2026),   # Kylian Mbappé
@@ -588,29 +588,29 @@ MOTM_TEAM_SCOPED = {
 
 
 async def get_player_motm(player_id: int, season: int) -> dict:
-    """Đếm số trận cầu thủ là 'hay nhất trận' trong MÙA đang xem.
+    """Count the matches where the player was 'player of the match' in the season being viewed.
 
-    MẶC ĐỊNH: so rating với CẢ 2 ĐỘI (phải cao nhất trong toàn bộ cầu thủ trên sân).
-    Trường hợp trong MOTM_TEAM_SCOPED: chỉ so trong ĐỘI NHÀ của cầu thủ.
-    Trường hợp trong MOTM_ANCHORS: kết quả = base + số MOTM ở các trận đá SAU ngày 'since'
-      (số neo là sàn, TỰ ĐỘNG cộng thêm khi có trận mới được MOTM).
+    DEFAULT: compare ratings across BOTH TEAMS (must be the highest of all players on the pitch).
+    Players in MOTM_TEAM_SCOPED: only compare within the player's OWN TEAM.
+    Players in MOTM_ANCHORS: result = base + MOTM in matches played AFTER the 'since' date'
+      (the anchor is a floor and AUTOMATICALLY increases when a new MOTM is earned).
 
-    API-Football KHÔNG có field POTM sẵn -> tự tính:
-      1. Lấy các đội cầu thủ khoác áo mùa này (từ /players statistics).
-      2. Lấy fixtures đã kết thúc của từng đội (/fixtures?team&season) + ngày trận.
-      3. Mỗi trận (chỉ trận cần đếm): gọi /fixtures/players; tìm rating cao nhất
-         (cả 2 đội hoặc chỉ đội nhà). Nếu là cầu thủ này -> +1. (Chỉ tính trận có ra sân.)
-    Tốn nhiều request (1/trận) nên cache STATIC_TTL (6h) và tải lazy ở frontend.
+    API-Football has NO built-in POTM field -> calculate it ourselves:
+      1. Get the teams the player played for this season (from /players statistics).
+      2. Get each team's finished fixtures (/fixtures?team&season) + match dates.
+      3. For each match (only the ones that need counting): call /fixtures/players and find the highest rating
+         (both teams or own team only). If it is this player -> +1. (Only matches the player played in.)
+    Uses many requests (1 per match), so it is cached with STATIC_TTL (6h) and lazy-loaded in the frontend.
     """
     anchor = MOTM_ANCHORS.get((player_id, season))
     base = anchor["base"] if anchor else 0
-    since = anchor["since"] if anchor else None  # chỉ đếm trận có NGÀY > since
+    since = anchor["since"] if anchor else None  # only count matches with DATE > since
 
     if settings.use_mock:
         return {"motm": base, "computed": 0, "anchor": base, "scanned": base or 0,
                 "season": season, "source": "mock"}
 
-    # 1) Các đội cầu thủ khoác áo mùa này.
+    # 1) Teams the player played for this season.
     pdata = await _request("/players", {"id": player_id, "season": season}, ttl=STATIC_TTL)
     resp = pdata.get("response", [])
     stats = resp[0].get("statistics", []) if resp else []
@@ -620,9 +620,9 @@ async def get_player_motm(player_id: int, season: int) -> dict:
         if (s.get("team") or {}).get("id")
     }
 
-    # 2) Gom fixture đã kết thúc + NGÀY trận (để lọc theo 'since').
+    # 2) Collect finished fixtures + match DATES (to filter by 'since').
     finished = {"FT", "AET", "PEN"}
-    fixture_dates: dict = {}   # fid -> ngày trận (ISO)
+    fixture_dates: dict = {}   # fid -> match date (ISO)
     for tid in team_ids:
         try:
             fx = await _request(
@@ -638,12 +638,12 @@ async def get_player_motm(player_id: int, season: int) -> dict:
 
     team_scoped = (player_id, season) in MOTM_TEAM_SCOPED
 
-    # Chỉ quét những trận CẦN ĐẾM: nếu có neo -> chỉ trận đá SAU 'since'
-    # (phần trước 'since' đã nằm trong base). Không neo -> quét hết.
+    # Only scan matches that NEED COUNTING: if anchored -> only matches played AFTER 'since'
+    # (matches before 'since' are already in base). Not anchored -> scan all.
     fids = [fid for fid, d in fixture_dates.items() if (not since) or (d[:10] > since)]
 
-    # 3) Tải SONG SONG (có giới hạn) cho nhanh; quét tuần tự ~50 trận dễ vượt timeout.
-    sem = asyncio.Semaphore(6)   # giới hạn để không vượt rate-limit API-Football
+    # 3) Fetch IN PARALLEL (with a limit) for speed; scanning ~50 matches sequentially can time out.
+    sem = asyncio.Semaphore(6)   # limit to avoid exceeding API-Football's rate limit
 
     async def _fetch_fixture_players(fid):
         async with sem:
@@ -660,7 +660,7 @@ async def get_player_motm(player_id: int, season: int) -> dict:
         if pl is None:
             continue
         teams = pl.get("response", [])
-        # Tìm đội của cầu thủ; bỏ qua nếu cầu thủ không ra sân trận này.
+        # Find the player's team; skip if the player did not play in this match.
         my_players = None
         for team in teams:
             if any((p.get("player") or {}).get("id") == player_id for p in team.get("players", [])):
@@ -669,7 +669,7 @@ async def get_player_motm(player_id: int, season: int) -> dict:
         if my_players is None:
             continue
         scanned += 1
-        # Phạm vi so sánh: chỉ đội nhà, hoặc cả 2 đội (mặc định).
+        # Comparison scope: own team only, or both teams (default).
         if team_scoped:
             candidates = my_players
         else:
@@ -686,13 +686,13 @@ async def get_player_motm(player_id: int, season: int) -> dict:
         if best_id == player_id:
             motm += 1
 
-    # Có neo: total = base + MOTM trận mới (sau 'since'). Không neo: total = motm.
+    # Anchored: total = base + MOTM in new matches (after 'since'). Not anchored: total = motm.
     total = base + motm
     return {
         "motm": total,
-        "computed": motm,                 # MOTM ở các trận sau 'since' (phần "mới")
+        "computed": motm,                 # MOTM in matches after 'since' (the 'new' part)
         "anchor": base,
-        "scanned": max(scanned, base),    # > 0 để frontend luôn hiện thẻ POTM
+        "scanned": max(scanned, base),    # > 0 so the frontend always shows the POTM card
         "season": season,
         "scope": "team" if team_scoped else "both",
         "source": "anchor+api" if anchor else "api",
@@ -702,7 +702,7 @@ async def get_player_motm(player_id: int, season: int) -> dict:
 async def get_lineups(fixture_id: int) -> list:
     if settings.use_mock:
         return mock_data.lineups_for(fixture_id)
-    # Đội hình đổi rất ít sau khi công bố (chỉ vài lần thay người) -> cache vừa phải.
+    # Line-ups change very little after being announced (only a few substitutions) -> medium cache.
     data = await _request("/fixtures/lineups", {"fixture": fixture_id}, ttl=UPCOMING_TTL)
     return data.get("response", [])
 
@@ -710,13 +710,13 @@ async def get_lineups(fixture_id: int) -> list:
 async def get_events(fixture_id: int) -> list:
     if settings.use_mock:
         return mock_data.events_for(fixture_id)
-    # Sự kiện (bàn thắng/thẻ) thay đổi liên tục khi live -> cache ngắn.
+    # Events (goals/cards) change constantly while live -> short cache.
     data = await _request("/fixtures/events", {"fixture": fixture_id}, ttl=LIVE_TTL)
     return data.get("response", [])
 
 
-# Giải ĐỘI TUYỂN dạng cúp mà API-Football hay GỘP số liệu VÒNG LOẠI vào bảng vua phá lưới
-# (vd World Cup 2018: Immobile/Ý đứng đầu dù Ý không dự VCK — đó là bàn ở vòng loại).
+# NATIONAL TEAM cup competitions where API-Football often MERGES QUALIFIER data into the top scorers table
+# (e.g. World Cup 2018: Immobile/Italy ranked first even though Italy did not qualify; those were qualifier goals).
 _QUALIFIER_LEAK_LEAGUES = {
     1,   # World Cup
     4,   # Euro
@@ -727,8 +727,8 @@ _QUALIFIER_LEAK_LEAGUES = {
 
 
 async def _finalist_team_ids(league: int, season: int) -> set:
-    """Tập id các đội THỰC SỰ dự VCK. Ưu tiên BẢNG XẾP HẠNG; nếu API thiếu BXH (mùa cũ) thì
-    fallback đọc từ LỊCH THI ĐẤU của giải (đội nào có đá ở VCK). {} nếu không xác định được."""
+    """Set of team ids that ACTUALLY played in the finals. Prefer the STANDINGS; if the API has no standings (old seasons),
+    fall back to the competition's FIXTURES (teams that played in the finals). {} if it cannot be determined."""
     try:
         st = await get_standings(league, season)
     except Exception:
@@ -742,7 +742,7 @@ async def _finalist_team_ids(league: int, season: int) -> set:
                     ids.add(tid)
     if ids:
         return ids
-    # Fallback: đội có mặt trong LỊCH THI ĐẤU VCK (league=finals nên không lẫn vòng loại).
+    # Fallback: teams that appear in the finals FIXTURES (league=finals, so qualifiers are not mixed in).
     try:
         data = await _request("/fixtures", {"league": league, "season": season}, ttl=STATIC_TTL)
     except Exception:
@@ -756,31 +756,31 @@ async def _finalist_team_ids(league: int, season: int) -> set:
 
 
 def _has_match_detail(p: dict) -> bool:
-    """True nếu dòng có DỮ LIỆU CẤP TRẬN (phút hoặc điểm) -> đã đá ở VCK. Số liệu vòng loại
-    bị gộp nhầm thường để trống cả hai."""
+    """True if the row has MATCH-LEVEL DATA (minutes or rating) -> played in the finals. Qualifier data
+    that was wrongly merged usually leaves both empty."""
     g = (p.get("statistics") or [{}])[0].get("games") or {}
     return g.get("minutes") is not None or g.get("rating") is not None
 
 
 async def _filter_to_finalists(league: int, season: int, resp: list) -> list:
-    """Vua phá lưới/kiến tạo/thẻ giải ĐỘI TUYỂN: bỏ số liệu VÒNG LOẠI bị API gộp nhầm.
-    Lọc theo ĐỘI DỰ VCK (từ BXH hoặc lịch đấu) — KHÔNG dựa số phút nên không bỏ nhầm scorer
-    thật. Giải khác -> giữ nguyên."""
+    """Top scorers/assists/cards for NATIONAL TEAM tournaments: remove QUALIFIER data wrongly merged by the API.
+    Filter by TEAMS IN THE FINALS (from standings or fixtures). Does NOT rely on minutes, so real scorers are not removed.
+    Other competitions -> unchanged."""
     if not resp or league not in _QUALIFIER_LEAK_LEAGUES:
         return resp
     ongoing = (season == config.LEAGUE_SEASON.get(league))
     ids = await _finalist_team_ids(league, season)
     if not ids:
-        return resp  # không xác định được đội dự VCK -> để nguyên, tránh xoá nhầm
+        return resp  # cannot determine the finals teams -> leave unchanged to avoid removing valid rows
     in_finals = [p for p in resp if ((p.get("statistics") or [{}])[0].get("team") or {}).get("id") in ids]
     if not in_finals:
         return resp
     if ongoing:
-        return in_finals  # đang đá: chỉ lọc theo đội, không dựa số phút (tránh bug Balogun)
-    # ĐÃ kết thúc: bỏ thêm dòng KHÔNG có phút (vòng loại gộp nhầm dù đội dự VCK, vd Morata/TBN
-    # 2018 ghi bàn vòng loại nhưng không đá VCK) — NHƯNG chỉ khi dữ liệu phút ĐỦ TỐT (>= nửa số
-    # dòng có chi tiết). Mùa quá cũ API thiếu phút cho cả scorer thật (vd Villa Euro 2008) thì
-    # giữ nguyên in_finals để khỏi bỏ nhầm.
+        return in_finals  # in progress: filter by team only, not by minutes (avoids the Balogun bug)
+    # FINISHED: also drop rows with NO minutes (qualifier data wrongly merged even if the team qualified, e.g. Morata/Spain
+    # 2018 scored in qualifiers but did not play in the finals), BUT only when the minutes data is GOOD ENOUGH (>= half
+    # of the rows have details). For very old seasons the API lacks minutes even for real scorers (e.g. Villa at Euro 2008), so
+    # keep in_finals unchanged to avoid wrongly removing them.
     detailed = [p for p in in_finals if _has_match_detail(p)]
     if detailed and len(detailed) >= len(in_finals) * 0.5:
         return detailed
@@ -795,7 +795,7 @@ async def get_topscorers(league: int, season: int = 2025) -> list:
 
 
 async def get_topassists(league: int, season: int = 2025) -> list:
-    """Vua kiến tạo của 1 giải. Cùng dạng dữ liệu như topscorers (statistics[].goals.assists)."""
+    """Top assists for a competition. Same data shape as topscorers (statistics[].goals.assists)."""
     if settings.use_mock:
         return mock_data.topscorers_for(league)
     data = await _request("/players/topassists", {"league": league, "season": season}, ttl=STATIC_TTL)
@@ -803,7 +803,7 @@ async def get_topassists(league: int, season: int = 2025) -> list:
 
 
 async def get_topyellowcards(league: int, season: int = 2025) -> list:
-    """Cầu thủ nhiều thẻ vàng nhất (statistics[].cards.yellow)."""
+    """Players with the most yellow cards (statistics[].cards.yellow)."""
     if settings.use_mock:
         return mock_data.topscorers_for(league)
     data = await _request("/players/topyellowcards", {"league": league, "season": season}, ttl=STATIC_TTL)
@@ -811,7 +811,7 @@ async def get_topyellowcards(league: int, season: int = 2025) -> list:
 
 
 async def get_topredcards(league: int, season: int = 2025) -> list:
-    """Cầu thủ nhiều thẻ đỏ nhất (statistics[].cards.red)."""
+    """Players with the most red cards (statistics[].cards.red)."""
     if settings.use_mock:
         return mock_data.topscorers_for(league)
     data = await _request("/players/topredcards", {"league": league, "season": season}, ttl=STATIC_TTL)
@@ -821,14 +821,14 @@ async def get_topredcards(league: int, season: int = 2025) -> list:
 async def get_statistics(fixture_id: int) -> list:
     if settings.use_mock:
         return mock_data.statistics_for(fixture_id)
-    # Thống kê (sút, kiểm soát bóng) cập nhật khi live -> cache ngắn.
+    # Statistics (shots, possession) update while live -> short cache.
     data = await _request("/fixtures/statistics", {"fixture": fixture_id}, ttl=LIVE_TTL)
     return data.get("response", [])
 
 
 async def get_predictions(fixture_id: int) -> dict:
-    """Dự đoán trận: xác suất thắng/hòa/thua, lời khuyên, so sánh phong độ 2 đội.
-    API-Football /predictions. Trả {} nếu không có dữ liệu (trận quá cũ / chưa hỗ trợ)."""
+    """Match prediction: win/draw/loss probabilities, advice, form comparison of the two teams.
+    API-Football /predictions. Returns {} if there is no data (match too old / not supported)."""
     if settings.use_mock:
         return {}
     data = await _request("/predictions", {"fixture": fixture_id}, ttl=STATIC_TTL)
@@ -848,8 +848,8 @@ async def get_h2h(fixture_id: int, home: int, away: int) -> list:
         return mock_data.h2h_for(fixture_id)
     data = await _request("/fixtures/headtohead", {"h2h": f"{home}-{away}", "last": 10}, ttl=STATIC_TTL)
     resp = data.get("response", [])
-    # Loại CHÍNH trận đang xem khỏi H2H — H2H chỉ tính các lần gặp TRƯỚC ĐÓ. Nếu không, trận
-    # hiện tại (đang đá / số liệu chưa chốt, vd kẹt ở 1H 1-0) bị đếm nhầm vào thắng/hòa/thua.
+    # Exclude the CURRENT match from H2H; H2H only counts PREVIOUS meetings. Otherwise the current
+    # match (live / not yet final, e.g. stuck at 1H 1-0) would be wrongly counted in wins/draws/losses.
     return [m for m in resp if ((m.get("fixture") or {}).get("id")) != fixture_id]
 
 
@@ -861,16 +861,16 @@ async def get_team_fixtures(team_id: int, last: int = 5) -> list:
 
 
 async def get_team_upcoming(team_id: int, nxt: int = 5) -> list:
-    """Các trận sắp đá của đội (lịch tương lai). Mock chưa có -> trả rỗng."""
+    """The team's upcoming fixtures (future schedule). Not in mock yet -> returns empty."""
     if settings.use_mock:
         return []
     data = await _request("/fixtures", {"team": team_id, "next": nxt}, ttl=UPCOMING_TTL)
     return data.get("response", [])
 
 
-# ===== Tìm kiếm GIẢI + QUỐC GIA (cho ô search cạnh thanh ngày) =====
+# ===== LEAGUE + COUNTRY search (for the search box next to the date bar) =====
 
-# Quốc gia (mock) cho vài giải tiêu biểu, để chế độ mock vẫn có dữ liệu search.
+# Countries (mock) for a few well-known leagues, so mock mode still has search data.
 _MOCK_LEAGUE_COUNTRY = {
     39: "England", 45: "England", 2: "World", 3: "World", 848: "World", 1: "World",
     10: "World", 15: "World", 140: "Spain", 143: "Spain", 135: "Italy",
@@ -879,9 +879,9 @@ _MOCK_LEAGUE_COUNTRY = {
 
 
 async def get_all_leagues() -> list:
-    """Danh sách MỌI giải (đã rút gọn) để đổ vào ô tìm kiếm phía client.
-    Cache 24h vì gần như không đổi -> dù bao nhiêu user cũng chỉ tốn 1 request/ngày.
-    Trả [{id, name, type, logo, country, country_code, flag}]."""
+    """List of ALL leagues (trimmed) to load into the client-side search box.
+    Cached for 24h because it almost never changes -> 1 request/day no matter how many users.
+    Returns [{id, name, type, logo, country, country_code, flag}]."""
     if settings.use_mock:
         out = []
         for l in mock_data.CURATED_LEAGUES:
@@ -909,9 +909,9 @@ async def get_all_leagues() -> list:
 
 async def get_league_fixtures(league_id: int, last: int = 12, nxt: int = 12,
                               season: Optional[int] = None) -> dict:
-    """Trận GẦN ĐÂY (kết quả) + SẮP TỚI của 1 giải. Dùng cho tab 'Lịch đấu' của trang giải.
-    season: nếu truyền -> lấy theo MÙA đó (đã đá xếp mới->cũ, sắp đá xếp cũ->mới) để khớp
-    với mùa đang chọn. Không truyền -> kiểu 'live' (last/next, trận mới nhất bất kể mùa)."""
+    """RECENT (results) + UPCOMING fixtures of a league. Used by the 'Fixtures' tab on the league page.
+    season: if given -> fetch that SEASON (played: newest -> oldest, upcoming: oldest -> newest) to match
+    the selected season. If not given -> 'live' style (last/next, latest matches regardless of season)."""
     if settings.use_mock:
         return {"recent": mock_data.fixtures_for(None, league_id), "upcoming": []}
     if season:
@@ -933,8 +933,8 @@ async def get_league_fixtures(league_id: int, last: int = 12, nxt: int = 12,
 
 
 async def get_league_seasons(league_id: int) -> list:
-    """Danh sách MÙA mà giải có dữ liệu (để client đổ vào ô chọn mùa). Trả [{year, current}]
-    sắp xếp mùa mới -> cũ. Cache 24h. [] nếu mock."""
+    """SEASONS for which the league has data (for the client's season dropdown). Returns [{year, current}]
+    sorted newest -> oldest. Cached 24h. [] in mock mode."""
     if settings.use_mock:
         return []
     data = await _request("/leagues", {"id": league_id}, ttl=LEAGUES_TTL)
@@ -946,16 +946,16 @@ async def get_league_seasons(league_id: int) -> list:
     return out
 
 
-# Cúp CLB UEFA (C1/C2/C3): vòng tên TRƠ "Play-offs" là VÒNG LOẠI (trước league stage),
-# không thuộc nhánh đấu chính -> bỏ. ("Knockout Round Play-offs" = play-off 1/8 mới thì GIỮ.)
+# UEFA club cups (UCL/UEL/UECL): a round named just "Play-offs" is a QUALIFYING round (before the league stage),
+# not part of the main bracket -> drop it. ("Knockout Round Play-offs" = the new round-of-16 play-off, so KEEP it.)
 _UEFA_CLUB_CUPS = {2, 3, 848}
 
 
 async def get_bracket(league_id: int, season: Optional[int] = None) -> list:
-    """Các trận VÒNG LOẠI TRỰC TIẾP (knockout) của giải -> client dựng SƠ ĐỒ NHÁNH ĐẤU.
-    Trả [] nếu giải không có vòng knockout (vd VĐQG) -> client ẩn tab.
-    season: mùa muốn xem; không truyền -> mùa mặc định theo giải.
-    1 request /fixtures?league&season (cache 6h) rồi lọc theo tên vòng."""
+    """KNOCKOUT matches of a competition -> the client builds the BRACKET diagram.
+    Returns [] if the competition has no knockout rounds (e.g. a domestic league) -> the client hides the tab.
+    season: the season to view; if not given -> the league's default season.
+    1 request /fixtures?league&season (cached 6h), then filter by round name."""
     if settings.use_mock:
         return []
     season = season or config.season_for(league_id)
@@ -963,10 +963,10 @@ async def get_bracket(league_id: int, season: Optional[int] = None) -> list:
     out = []
     for f in data.get("response", []):
         rnd = ((f.get("league") or {}).get("round") or "")
-        # UEFA: vòng tên trơ "Play-offs" = vòng loại trước league stage -> bỏ khỏi nhánh đấu.
+        # UEFA: a round named just "Play-offs" = qualifying round before the league stage -> removed from the bracket.
         if league_id in _UEFA_CLUB_CUPS and re.fullmatch(r"\s*play-?offs?\s*", rnd, re.IGNORECASE):
             continue
-        # Vòng knockout (R16/R32/QF/SF/Final/play-off/"8th|16th Finals"...), BỎ vòng bảng / VĐQG / vòng loại.
+        # Knockout rounds (R16/R32/QF/SF/Final/play-off/"8th|16th Finals"...), EXCLUDING group stage / league / qualifiers.
         if re.search(r"round of|quarter|semi|\bfinal\b|\d+(?:st|nd|rd|th)\s+finals?|play-?off|1/\d|last \d+", rnd, re.IGNORECASE) \
                 and not re.search(r"group|regular season|league stage|qualif", rnd, re.IGNORECASE):
             out.append(f)
@@ -974,7 +974,7 @@ async def get_bracket(league_id: int, season: Optional[int] = None) -> list:
 
 
 async def get_national_team(country: str) -> Optional[dict]:
-    """Tìm ĐỘI TUYỂN QUỐC GIA theo tên nước (chấp nhận tên tiếng Việt). Ưu tiên national=true."""
+    """Find a NATIONAL TEAM by country name (Vietnamese names accepted). Prefer national=true."""
     name = _vi_translate((country or "").strip())  # 'tây ban nha' -> 'Spain'
     if len(name) < 2 or settings.use_mock:
         return None
@@ -996,7 +996,7 @@ async def get_national_team(country: str) -> Optional[dict]:
 
 
 async def get_country_fixtures(country: str) -> dict:
-    """Trận GẦN ĐÂY + SẮP TỚI của ĐỘI TUYỂN nước này. Trả {team, recent, upcoming}."""
+    """RECENT + UPCOMING matches of this country's NATIONAL TEAM. Returns {team, recent, upcoming}."""
     team = await get_national_team(country)
     if not team:
         return {"team": None, "recent": [], "upcoming": []}
@@ -1007,28 +1007,28 @@ async def get_country_fixtures(country: str) -> dict:
     return {"team": team, "recent": recent, "upcoming": upcoming}
 
 
-# ===== Tìm trận đấu (match search) =====
-# Cho phép gõ "Real Madrid vs Barcelona" -> ra trận gần đây + sắp đá giữa 2 đội,
-# hoặc gõ 1 đội -> lịch đấu của đội đó.
+# ===== Match search =====
+# Lets users type "Real Madrid vs Barcelona" -> recent + upcoming matches between the two teams,
+# or type one team -> that team's fixtures.
 import re
 import unicodedata
 
-# Các từ ngăn cách 2 đội: "vs", "v", "x", "-", "–", "đấu với", "gặp".
+# Separators between the two teams: "vs", "v", "x", "-", "–", "đấu với", "gặp" (Vietnamese for 'vs').
 _VS_RE = re.compile(r"\s+(?:vs|versus|v|x|-|–|đấu với|gặp)\s+", re.IGNORECASE)
 
 
 def _norm_key(s: str) -> str:
-    """Chuẩn hoá để tra cứu: bỏ dấu tiếng Việt, thường hoá, gộp khoảng trắng.
-    Nhờ vậy gõ có dấu ('bồ đào nha') hay không dấu ('bo dao nha') đều khớp."""
+    """Normalise for lookup: remove Vietnamese accents, lowercase, collapse whitespace.
+    So typing with accents ('bồ đào nha') or without ('bo dao nha') both match."""
     s = (s or "").lower().strip().replace("đ", "d")
     s = unicodedata.normalize("NFD", s)
     s = "".join(c for c in s if unicodedata.category(c) != "Mn")
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
 
 
-# Tên tiếng Việt -> tên tiếng Anh mà API-Football hiểu (đội tuyển quốc gia).
-# Khoá đã ở dạng không dấu (_norm_key). Bỏ qua Thổ Nhĩ Kỳ / Ireland vì API không
-# trả về đúng đội tuyển nam cho các tên đó.
+# Vietnamese name -> English name that API-Football understands (national teams).
+# Keys are already accent-free (_norm_key). Turkey / Ireland are skipped because the API does not
+# return the correct men's national team for those names.
 _VI_COUNTRIES = {
     "bo dao nha": "Portugal",
     "tay ban nha": "Spain",
@@ -1083,23 +1083,23 @@ _VI_COUNTRIES = {
 
 
 def _vi_translate(name: str) -> str:
-    """Nếu là tên nước bằng tiếng Việt -> đổi sang tên tiếng Anh; nếu không, giữ nguyên."""
+    """If it is a country name in Vietnamese -> convert to English; otherwise keep it unchanged."""
     return _VI_COUNTRIES.get(_norm_key(name), name)
 
 
 def _split_vs(q: str):
-    """Tách 'A vs B' -> ['A', 'B']. Nếu không có dấu ngăn cách -> [q]."""
+    """Split 'A vs B' -> ['A', 'B']. If there is no separator -> [q]."""
     parts = [p.strip() for p in _VS_RE.split((q or "").strip(), maxsplit=1)]
     return [p for p in parts if p]
 
 
-# Đội nữ / trẻ / dự bị -> hạ điểm để không bị nhầm với đội 1 nam.
+# Women's / youth / reserve teams -> lower score so they are not confused with the senior men's team.
 _DEPRIORITIZE = re.compile(r"(\bw\b|\bwomen\b|\bu\d{2}\b|\bii\b|\bb\b|reserves?|youth|academy)", re.IGNORECASE)
 
 
 def _team_variants(name: str):
-    """Các cách tìm để bắt cả tên có gạch nối ('Al-Nassr') lẫn có dấu cách,
-    và token dài nhất ('al nassr' -> 'nassr') vì API đôi khi chỉ khớp theo từ."""
+    """Search variants to catch both hyphenated names ('Al-Nassr') and names with spaces,
+    plus the longest token ('al nassr' -> 'nassr') because the API sometimes only matches single words."""
     name = (name or "").strip()
     out = [name]
     for v in (name.replace(" ", "-"), name.replace("-", " ")):
@@ -1114,7 +1114,7 @@ def _team_variants(name: str):
 
 
 def _score_team(query: str, team_name: str) -> float:
-    """Điểm mức độ khớp: khớp tuyệt đối > bắt đầu bằng > chứa; phạt đội nữ/trẻ và tên dài."""
+    """Match score: exact match > starts with > contains; penalise women's/youth teams and long names."""
     qn = (query or "").lower().strip().replace("-", " ")
     nn = (team_name or "").lower().replace("-", " ")
     s = 0.0
@@ -1128,13 +1128,13 @@ def _score_team(query: str, team_name: str) -> float:
         s += 30
     if _DEPRIORITIZE.search(team_name or ""):
         s -= 50
-    s -= max(0, len(nn) - len(qn)) * 0.6  # càng sát query càng tốt
+    s -= max(0, len(nn) - len(qn)) * 0.6  # the closer to the query the better
     return s
 
 
-# Một số CLB nổi bật mà tìm theo tên của API-Football hay sót (vd 'Al-Hilal Saudi FC'
-# không ra khi gõ 'al hilal' — API trả về Al Hilal của Libya/Sudan thay vì Ả Rập Xê Út).
-# Map: từ khoá đã chuẩn hoá -> (id, tên hiển thị, quốc gia). Dễ bổ sung thêm khi cần.
+# Some well-known clubs that API-Football's name search often misses (e.g. 'Al-Hilal Saudi FC'
+# does not appear when typing 'al hilal'; the API returns Al Hilal from Libya/Sudan instead of Saudi Arabia).
+# Map: normalised keyword -> (id, display name, country). Easy to extend when needed.
 _FEATURED = {
     "al hilal": (2932, "Al-Hilal Saudi FC", "Saudi-Arabia"),
     "al hilal saudi": (2932, "Al-Hilal Saudi FC", "Saudi-Arabia"),
@@ -1145,7 +1145,7 @@ _FEATURED = {
 
 
 def _featured_match(name: str):
-    """Nếu từ khoá trùng 1 CLB nổi bật -> trả thẳng đội đó (không phụ thuộc search API)."""
+    """If the keyword matches a well-known club -> return that team directly (independent of the search API)."""
     hit = _FEATURED.get((name or "").lower().strip().replace("-", " "))
     if not hit:
         return None
@@ -1155,8 +1155,8 @@ def _featured_match(name: str):
 
 
 async def _search_teams(name: str, limit: int = 8, deep: bool = False):
-    """Tìm đội theo tên, gộp nhiều biến thể rồi xếp theo độ khớp. Trả [{id,name,logo,country}].
-    deep=True: tìm hết mọi biến thể (cho match-search, để có đủ ứng viên trùng tên ở nhiều nước)."""
+    """Search teams by name, combine several variants, then rank by match quality. Returns [{id,name,logo,country}].
+    deep=True: search every variant (for match-search, to get all same-name candidates across countries)."""
     name = _vi_translate((name or "").strip())  # 'bồ đào nha' -> 'Portugal'
     if len(name) < 2:
         return []
@@ -1172,11 +1172,11 @@ async def _search_teams(name: str, limit: int = 8, deep: bool = False):
             if t.get("id") and t["id"] not in seen:
                 seen[t["id"]] = {"id": t["id"], "name": t.get("name"),
                                  "logo": t.get("logo"), "country": t.get("country")}
-        # Tìm nhanh (dropdown): có khớp tuyệt đối là đủ. Tìm sâu (match-search): quét hết.
+        # Quick search (dropdown): an exact match is enough. Deep search (match-search): scan everything.
         if not deep and any((t["name"] or "").lower().replace("-", " ") == qn for t in seen.values()):
             break
     ranked = sorted(seen.values(), key=lambda t: _score_team(name, t["name"] or ""), reverse=True)
-    # CLB nổi bật bị API sót -> chèn lên đầu để luôn ưu tiên.
+    # Well-known clubs missed by the API -> insert at the top so they always come first.
     feat = _featured_match(name)
     if feat:
         ranked = [feat] + [t for t in ranked if t["id"] != feat["id"]]
@@ -1184,33 +1184,33 @@ async def _search_teams(name: str, limit: int = 8, deep: bool = False):
 
 
 def _best_pair(ca: list, cb: list):
-    """Chọn cặp đội cho 'A vs B'. Ưu tiên 2 đội CÙNG QUỐC GIA (bắt đúng derby khi tên trùng,
-    vd 'Al Hilal' có ở nhiều nước), đồng thời ưu tiên đội khớp tên cao ở mỗi bên."""
+    """Choose the team pair for 'A vs B'. Prefer 2 teams from the SAME COUNTRY (finds the right derby when names clash,
+    e.g. 'Al Hilal' exists in several countries), while preferring the best name match on each side."""
     if not ca or not cb:
         return (ca[0] if ca else None, cb[0] if cb else None)
     best, best_score = None, -1e9
     for i, a in enumerate(ca):
         for j, b in enumerate(cb):
-            s = -(i + j)  # đội xếp hạng càng cao mỗi bên càng tốt
+            s = -(i + j)  # the higher each side's ranking, the better
             if a.get("country") and a.get("country") == b.get("country"):
-                s += 10   # cùng nước -> nhiều khả năng là cặp đối đầu thật
+                s += 10   # same country -> more likely to be a real fixture pairing
             if s > best_score:
                 best_score, best = s, (a, b)
     return best
 
 
 async def _resolve_team(name: str) -> Optional[dict]:
-    """Phân giải tên đội -> {id, name, logo} khớp nhất (ưu tiên đội 1 nam)."""
+    """Resolve a team name -> best matching {id, name, logo} (prefer the senior men's team)."""
     cands = await _search_teams(name, limit=1, deep=True)
     return cands[0] if cands else None
 
 
 async def match_search(q: str) -> dict:
-    """Trả {mode, teamA/teamB hoặc team, recent: [...], upcoming: [...]}.
-    mode = 'h2h' khi gõ 'A vs B', 'team' khi gõ 1 đội."""
+    """Returns {mode, teamA/teamB or team, recent: [...], upcoming: [...]}.
+    mode = 'h2h' when typing 'A vs B', 'team' when typing one team."""
     parts = _split_vs(q)
 
-    # ---- 2 đội: đối đầu (head-to-head) ----
+    # ---- 2 teams: head-to-head ----
     if len(parts) >= 2:
         ca = await _search_teams(parts[0], deep=True)
         cb = await _search_teams(parts[1], deep=True)
@@ -1226,7 +1226,7 @@ async def match_search(q: str) -> dict:
             upcoming = (await _request("/fixtures/headtohead", {"h2h": h2h, "next": 5}, ttl=UPCOMING_TTL)).get("response", [])
         return {"mode": "h2h", "teamA": a, "teamB": b, "recent": recent, "upcoming": upcoming}
 
-    # ---- 1 đội: lịch đấu của đội ----
+    # ---- 1 team: the team's fixtures ----
     team = await _resolve_team(parts[0] if parts else q)
     if not team:
         return {"mode": "team", "team": None, "recent": [], "upcoming": [], "notFound": [q]}
@@ -1239,22 +1239,22 @@ async def match_search(q: str) -> dict:
 
 
 async def raw_request(path: str, params: dict) -> dict:
-    """Debug: trả nguyên văn JSON từ API-Football (gồm errors/results)."""
+    """Debug: return the raw JSON from API-Football (including errors/results)."""
     return await _request(path, params)
 
 
-# ===== Cầu thủ nổi bật (chèn thẳng lên đầu kết quả tìm) =====
-# Vì sao cần làm thế này:
-#  1) API-Football KHÔNG có chỉ số độ nổi tiếng.
-#  2) Họ chính thức của nhiều sao có thêm chữ ('Cristiano Ronaldo' họ 'dos Santos
-#     Aveiro', 'L. Messi' họ 'Messi Cuccittini') -> thuật toán khớp theo HỌ đẩy họ
-#     chìm dưới người vô danh ('Ronaldo Teixiera', 'Messina').
-#  3) Endpoint /players/profiles (plan hiện tại) cắt kết quả ~250 và NHIỀU KHI KHÔNG
-#     trả về sao lớn (vd Harry Kane, Vinícius...) -> boost thôi cũng vô dụng.
-# => Giải pháp chắc nhất: tự giữ danh sách (id, tên đẹp, alias) đã XÁC MINH ID, và
-#    CHÈN THẲNG vào kết quả khi từ khoá khớp alias. Ảnh dựng từ id theo mẫu chuẩn của
-#    API-Football nên không cần gọi thêm API.
-# Muốn thêm sao: tra ID đúng qua /api/_debug/players?search=<tên đầy đủ> rồi thêm 1 dòng.
+# ===== Featured players (inserted at the top of search results) =====
+# Why this is needed:
+#  1) API-Football has NO popularity metric.
+#  2) Many stars have longer official surnames ('Cristiano Ronaldo' surname 'dos Santos
+#     Aveiro', 'L. Messi' surname 'Messi Cuccittini') -> surname-based matching pushes them
+#     below unknown players ('Ronaldo Teixiera', 'Messina').
+#  3) The /players/profiles endpoint (current plan) cuts results at ~250 and OFTEN DOES NOT
+#     return big stars (e.g. Harry Kane, Vinícius...) -> boosting alone does not help.
+# => Most reliable solution: keep our own list of (id, display name, aliases) with VERIFIED IDs, and
+#    INSERT them directly into the results when the keyword matches an alias. Photos are built from the id using
+#    API-Football's standard URL pattern, so no extra API call is needed.
+# To add a star: look up the correct ID via /api/_debug/players?search=<full name>, then add one line.
 _PLAYER_PHOTO = "https://media.api-sports.io/football/players/{}.png"
 
 FAMOUS_PLAYERS = [
@@ -1281,12 +1281,12 @@ FAMOUS_PLAYERS = [
     (186, "Son Heung-min", ("son", "heung", "son heung")),
 ]
 
-# Tra cứu nhanh: id -> tên đẹp (để ghi đè tên ngắn 'L. Messi' nếu API có trả về).
+# Quick lookup: id -> display name (to override short names like 'L. Messi' if the API returns them).
 _FAMOUS_NAME = {pid: name for pid, name, _ in FAMOUS_PLAYERS}
 
 
 def _famous_matches(query: str) -> list:
-    """Sao lớn khớp từ khoá -> chèn thẳng vào kết quả (id, name, photo)."""
+    """Stars matching the keyword -> inserted directly into the results (id, name, photo)."""
     nq = _norm_key(query)
     if not nq:
         return []
@@ -1294,7 +1294,7 @@ def _famous_matches(query: str) -> list:
     for pid, name, aliases in FAMOUS_PLAYERS:
         for a in aliases:
             na = _norm_key(a)
-            # Khớp khi gõ một phần ('ronald' ~ 'ronaldo') hoặc gõ cả cụm ('lionel messi').
+            # Matches partial input ('ronald' ~ 'ronaldo') or the full phrase ('lionel messi').
             if na.startswith(nq) or nq.startswith(na):
                 hits.append({"id": pid, "name": name, "photo": _PLAYER_PHOTO.format(pid)})
                 break
@@ -1302,44 +1302,44 @@ def _famous_matches(query: str) -> list:
 
 
 def _score_player(query: str, profile: dict) -> float:
-    """Điểm khớp tên cầu thủ. Xét cả CỤM ('lionel messi') lẫn TOKEN HỌ ('messi')
-    để: (1) 'Messi' xịn không bị chìm dưới 'Messina/Messías', và (2) gõ 'Lionel Messi'
-    vẫn ưu tiên Messi xịn hơn 'Lionel Messi Nyamsi'."""
+    """Player name match score. Considers both the full PHRASE ('lionel messi') and the SURNAME token ('messi')
+    so that: (1) the real 'Messi' is not buried under 'Messina/Messías', and (2) typing 'Lionel Messi''
+    still ranks the real Messi above 'Lionel Messi Nyamsi'."""
     qn = _norm_key(query)
     qtokens = [t for t in qn.split() if len(t) >= 2]
-    qlast = qtokens[-1] if qtokens else qn   # token "họ" hay gặp ở cuối, vd 'messi'
+    qlast = qtokens[-1] if qtokens else qn   # the 'surname' token is usually last, e.g. 'messi'
     p = profile.get("player") or {}
     last = _norm_key(p.get("lastname") or "")
     name = _norm_key(p.get("name") or "")
     s = 0.0
     if qn and (last == qn or name == qn):
-        s += 100          # khớp tuyệt đối cả cụm
+        s += 100          # exact match of the whole phrase
     elif qlast and last == qlast:
-        s += 85           # họ khớp đúng token họ ('Messi' == 'messi')
+        s += 85           # surname exactly matches the surname token ('Messi' == 'messi')
     elif qlast and last.startswith(qlast):
-        s += 70           # họ bắt đầu bằng ('Messina' ~ 'messi')
+        s += 70           # surname starts with it ('Messina' ~ 'messi')
     elif qn and name.startswith(qn):
-        s += 55           # tên đầy đủ bắt đầu bằng cả cụm
+        s += 55           # full name starts with the whole phrase
     elif qlast and qlast in last:
         s += 40
     elif qn and qn in name:
         s += 30
-    # Hồ sơ đầy đủ (có ảnh / vị trí) thường là cầu thủ nổi bật hơn -> nhỉnh điểm.
+    # A complete profile (with photo / position) is usually a more notable player -> small bonus.
     if p.get("photo"):
         s += 2
     if p.get("position"):
         s += 1
-    # Họ càng sát độ dài token họ càng tốt ('Messi' hơn 'Messina').
+    # The closer the surname length is to the surname token, the better ('Messi' beats 'Messina').
     s -= max(0, len(last) - len(qlast)) * 0.5
-    # Nếu sao lớn cũng lọt vào kết quả của API -> đẩy hẳn lên đầu (phòng khi có).
+    # If a star also appears in the API results -> push it to the top (just in case).
     if p.get("id") in _FAMOUS_NAME:
         s += 1000
     return s
 
 
 async def search(q: str) -> dict:
-    """Tìm đội + cầu thủ theo tên. Trả {'teams': [...], 'players': [...]}.
-    Bọc try/except từng phần để 1 endpoint lỗi (vd plan chặn) không làm hỏng cả search."""
+    """Search teams + players by name. Returns {'teams': [...], 'players': [...]}.
+    Each part is wrapped in try/except so one failing endpoint (e.g. blocked by the plan) does not break the whole search."""
     if settings.use_mock:
         return mock_data.search(q)
     qq = (q or "").strip()
@@ -1348,8 +1348,8 @@ async def search(q: str) -> dict:
 
     async def find_teams():
         try:
-            # Dùng cùng bộ tìm + xếp hạng với match-search: bắt cả tên có gạch nối
-            # ('Al-Nassr' khi gõ 'al nassr') và ưu tiên đội 1 nam thay vì đội nữ/trẻ.
+            # Uses the same search + ranking as match-search: catches hyphenated names
+            # ('Al-Nassr' when typing 'al nassr') and prefers the senior men's team over women's/youth teams.
             return await _search_teams(qq, limit=8)
         except Exception:
             return []
@@ -1361,16 +1361,16 @@ async def search(q: str) -> dict:
             return []
 
     async def find_players():
-        # API /players/profiles tìm theo HỌ. Gõ "Lionel Messi" chỉ khớp tên đầy đủ
-        # ('Lionel Messi Nyamsi') mà SÓT Messi xịn -> phải tìm thêm bằng token họ.
-        # Cũng bỏ initial 1 ký tự ('L.Messi' -> 'Messi').
+        # The /players/profiles API searches by SURNAME. Typing "Lionel Messi" only matches the full name
+        # ('Lionel Messi Nyamsi') and MISSES the real Messi -> also search by the surname token.
+        # Also drop 1-character initials ('L.Messi' -> 'Messi').
         tokens = [t for t in re.split(r"[^0-9A-Za-zÀ-ÿ]+", qq) if len(t) >= 2]
         terms = []
         for t in ([qq] + ([max(tokens, key=len), tokens[-1]] if tokens else [])):
             t = t.strip()
             if t and t.lower() not in [x.lower() for x in terms]:
                 terms.append(t)
-        # Gọi SONG SONG (tối đa 3 từ khoá) rồi gộp, khử trùng theo id.
+        # Call IN PARALLEL (up to 3 keywords), then merge and de-duplicate by id.
         batches = await asyncio.gather(*[_profiles(t) for t in terms[:3]])
         merged = {}
         for resp in batches:
@@ -1378,7 +1378,7 @@ async def search(q: str) -> dict:
                 pid = (p.get("player") or {}).get("id")
                 if pid and pid not in merged:
                     merged[pid] = p
-        # Xếp theo độ khớp tên đối với TỪ KHOÁ GỐC (để 'Messi' xịn lên đầu).
+        # Rank by name match against the ORIGINAL keyword (so the real 'Messi' comes first).
         ranked = sorted(merged.values(), key=lambda p: _score_player(qq, p), reverse=True)
         api_players = []
         for p in ranked:
@@ -1386,12 +1386,12 @@ async def search(q: str) -> dict:
             pid = pl.get("id")
             api_players.append({
                 "id": pid,
-                # Sao lớn: dùng tên hiển thị đẹp (vd 'Lionel Messi' thay cho 'L. Messi').
+                # Stars: use the nicer display name (e.g. 'Lionel Messi' instead of 'L. Messi').
                 "name": _FAMOUS_NAME.get(pid) or pl.get("name"),
                 "photo": pl.get("photo"),
             })
-        # Chèn sao lớn khớp alias LÊN ĐẦU, khử trùng theo id (sao lớn có thể đã có
-        # trong kết quả API -> chỉ giữ 1 bản, ưu tiên bản sao lớn).
+        # Insert stars matching an alias AT THE TOP and de-duplicate by id (the star may already be
+        # in the API results -> keep only one copy, preferring the star entry).
         seen, result = set(), []
         for item in _famous_matches(qq) + api_players:
             pid = item.get("id")
@@ -1400,6 +1400,6 @@ async def search(q: str) -> dict:
                 result.append(item)
         return result[:8]
 
-    # Chạy SONG SONG đội + cầu thủ để ô search phản hồi nhanh hơn (trước đây gọi tuần tự).
+    # Run teams + players IN PARALLEL so the search box responds faster (previously sequential).
     teams, players = await asyncio.gather(find_teams(), find_players())
     return {"teams": teams, "players": players}

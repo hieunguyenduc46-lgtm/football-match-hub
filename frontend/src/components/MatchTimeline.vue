@@ -8,14 +8,14 @@ function isHome(e) {
   return e?.team?.id === props.homeTeamId
 }
 
-// Phút sự kiện, KÈM bù giờ nếu có (vd 45+3, 90+2). Khớp cách hiển thị ở tóm tắt bàn thắng.
+// Event minute, INCLUDING stoppage time if any (e.g. 45+3, 90+2). Matches how the goal summary displays it.
 function minute(e) {
   const tm = e.time || {}
   if (tm.elapsed == null) return ''
   return tm.extra ? `${tm.elapsed}+${tm.extra}` : `${tm.elapsed}`
 }
 
-// Icon theo loại sự kiện.
+// Icon by event type.
 function icon(e) {
   if (e.type === 'Goal') return e.detail === 'Own Goal' ? '⚽(OG)' : '⚽'
   if (e.type === 'Card') return e.detail === 'Red Card' ? '🟥' : '🟨'

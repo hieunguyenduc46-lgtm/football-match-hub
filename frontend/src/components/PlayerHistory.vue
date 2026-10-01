@@ -16,7 +16,7 @@ const transfers = computed(() => props.history?.transfers || [])
 const sidelined = computed(() => props.history?.sidelined || [])
 const seasons = computed(() => props.history?.seasons || [])
 
-// ===== Danh hiệu: gộp các lần VÔ ĐỊCH theo từng giải, đếm số lần =====
+// ===== Trophies: group TITLES by competition and count them =====
 const titles = computed(() => {
   const won = trophies.value.filter((x) => (x.place || '').toLowerCase() === 'winner')
   const map = new Map() // league -> count
@@ -31,7 +31,7 @@ const titles = computed(() => {
 const titlesTotal = computed(() => trophies.value.filter((x) => (x.place || '').toLowerCase() === 'winner').length)
 const runnerUp = computed(() => trophies.value.filter((x) => (x.place || '').toLowerCase() !== 'winner').length)
 
-// ===== Chuyển nhượng: mới nhất trước =====
+// ===== Transfers: newest first =====
 const moves = computed(() =>
   [...transfers.value]
     .filter((x) => x && x.teams)
@@ -39,7 +39,7 @@ const moves = computed(() =>
 )
 function yearOf(d) { return d ? String(d).slice(0, 4) : '' }
 
-// ===== Chấn thương / treo giò: mới nhất trước, giới hạn 10 =====
+// ===== Injuries / suspensions: newest first, limited to 10 =====
 const sidelinedList = computed(() =>
   [...sidelined.value]
     .sort((a, b) => String(b.start).localeCompare(String(a.start)))
@@ -55,7 +55,7 @@ const hasAny = computed(
   <div v-if="loading" class="skeleton" style="height:120px; margin-top:16px"></div>
 
   <template v-else-if="hasAny">
-    <!-- DANH HIỆU -->
+    <!-- TROPHIES -->
     <div v-if="titlesTotal || runnerUp">
       <h3 class="stat-group">
         {{ $t('histTrophies') }}
@@ -69,7 +69,7 @@ const hasAny = computed(
       </div>
     </div>
 
-    <!-- THỐNG KÊ THEO MÙA -->
+    <!-- STATISTICS BY SEASON -->
     <div v-if="seasons.length">
       <h3 class="stat-group">{{ $t('histSeasons') }}</h3>
       <div class="comp-wrap">
@@ -96,7 +96,7 @@ const hasAny = computed(
       </div>
     </div>
 
-    <!-- CHUYỂN NHƯỢNG -->
+    <!-- TRANSFERS -->
     <div v-if="moves.length">
       <h3 class="stat-group">{{ $t('histTransfers') }}</h3>
       <div class="tl">
@@ -114,7 +114,7 @@ const hasAny = computed(
       </div>
     </div>
 
-    <!-- CHẤN THƯƠNG / TREO GIÒ -->
+    <!-- INJURIES / SUSPENSIONS -->
     <div v-if="sidelinedList.length">
       <h3 class="stat-group">{{ $t('histInjuries') }}</h3>
       <div class="tl">

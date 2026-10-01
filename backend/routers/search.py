@@ -11,16 +11,16 @@ router = APIRouter(prefix="/api", tags=["search"])
 @router.get("/search")
 @limiter.shared_limit("40/minute", scope="search")
 async def search(request: Request, q: str = ""):
-    """Tìm đội + cầu thủ theo tên (cho ô search ở header).
-    Rate limit: gọi nhiều /players/profiles -> chặn spam, nhưng đủ rộng cho gõ bình thường."""
+    """Search teams + players by name (for the search box in the header).
+    Rate limit: calls /players/profiles several times -> blocks spam but is loose enough for normal typing."""
     return await api_football.search(q)
 
 
 @router.get("/match-search")
 @limiter.shared_limit("40/minute", scope="search")
 async def match_search(request: Request, q: str = ""):
-    """Tìm trận đấu. Gõ 'A vs B' -> đối đầu 2 đội; gõ 1 đội -> lịch đấu đội đó.
-    Trả {mode, teamA/teamB hoặc team, recent: [...], upcoming: [...]}."""
+    """Match search. Type 'A vs B' -> head-to-head of two teams; type one team -> that team's fixtures.
+    Returns {mode, teamA/teamB or team, recent: [...], upcoming: [...]}."""
     if not (q or "").strip():
         return {"mode": "team", "team": None, "recent": [], "upcoming": []}
     return await api_football.match_search(q)
@@ -28,8 +28,8 @@ async def match_search(request: Request, q: str = ""):
 
 @router.get("/_debug/players")
 async def debug_players(search: str = ""):
-    """Xem nguyên văn API trả về cho tìm kiếm cầu thủ (để chẩn lỗi).
-    CHỈ chạy khi DEBUG=true; ở production trả 404."""
+    """Show the raw API output for player search (for debugging).
+    ONLY runs when DEBUG=true; returns 404 in production."""
     if not config.settings.debug:
         raise HTTPException(status_code=404, detail="Not found")
     try:
@@ -40,11 +40,11 @@ async def debug_players(search: str = ""):
 
 @router.get("/leagues")
 def leagues():
-    """Danh sách giải để đổ vào bộ lọc."""
+    """League list for the filter."""
     return {"response": mock_data.CURATED_LEAGUES}
 
 
 @router.get("/leagues/all")
 async def leagues_all():
-    """Danh sách MỌI giải (rút gọn, cache 24h) cho ô tìm kiếm giải/quốc gia ở client."""
+    """List of ALL leagues (trimmed, cached 24h) for the client's league/country search box."""
     return {"response": await api_football.get_all_leagues()}
