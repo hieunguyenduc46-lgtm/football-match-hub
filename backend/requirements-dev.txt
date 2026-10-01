@@ -1,0 +1,4 @@
+# Test / CI dependencies (installed by the Jenkins pipeline, not needed in production).
+-r requirements.txt
+pytest==8.3.3
+pytest-cov==5.0.0
