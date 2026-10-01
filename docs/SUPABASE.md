@@ -1,23 +1,23 @@
-# Phase 4.5 — Nâng Favorites lên Supabase (auth + đồng bộ)
+# Phase 4.5 (optional, not implemented yet): moving Favorites to Supabase (auth + sync)
 
-Hiện favorites lưu trong **localStorage** (chỉ trên 1 máy). Guide này nâng lên **Supabase**
-để có **tài khoản đăng nhập thật** + **đồng bộ nhiều thiết bị**, mà **giữ nguyên** cách dùng
-store `useFavoritesStore` hiện tại.
+Favorites are currently stored in **localStorage** (on one device only). This guide moves them to **Supabase**
+to get **real user accounts** + **sync across devices**, while **keeping** the current
+`useFavoritesStore` interface unchanged.
 
-> Làm guide này khi bạn rảnh — không bắt buộc để web chạy. Web vẫn hoạt động đầy đủ với localStorage.
+> This is a future improvement. It is not needed to run the app, which works fully with localStorage.
 
 ---
 
-## 1. Tạo project Supabase
+## 1. Create a Supabase project
 
-1. Vào https://supabase.com → tạo project (free).
-2. Vào **Project Settings → API**, copy 2 giá trị:
-   - **Project URL** (vd `https://abcd.supabase.co`)
+1. Go to https://supabase.com → create a project (free).
+2. Open **Project Settings → API** and copy 2 values:
+   - **Project URL** (e.g. `https://abcd.supabase.co`)
    - **anon public key**
 
-## 2. Tạo bảng `favorites` + bật bảo mật (RLS)
+## 2. Create the `favorites` table + enable row-level security (RLS)
 
-Vào **SQL Editor** của Supabase, chạy:
+In the Supabase **SQL Editor**, run:
 
 ```sql
 create table favorites (
@@ -33,30 +33,30 @@ create table favorites (
 
 alter table favorites enable row level security;
 
--- Mỗi user chỉ thấy/sửa được favorites của chính mình
+-- Each user can only see/change their own favorites
 create policy "own favorites" on favorites
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 ```
 
-## 3. Bật đăng nhập
+## 3. Enable sign-in
 
-**Authentication → Providers → Email**: bật Email (có thể tắt "Confirm email" cho dev nhanh).
+**Authentication → Providers → Email**: enable Email (you can turn off "Confirm email" for faster development).
 
-## 4. Cài thư viện + biến môi trường
+## 4. Install the library + environment variables
 
 ```bash
 cd frontend
 npm install @supabase/supabase-js
 ```
 
-Thêm vào `frontend/.env` (KHÔNG commit file này):
+Add to `frontend/.env` (do NOT commit this file):
 
 ```
 VITE_SUPABASE_URL=https://abcd.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
 
-## 5. Tạo client Supabase
+## 5. Create the Supabase client
 
 `frontend/src/services/supabase.js`:
 
@@ -66,14 +66,14 @@ import { createClient } from '@supabase/supabase-js'
 const url = import.meta.env.VITE_SUPABASE_URL
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-// Nếu chưa cấu hình -> null, store sẽ tự fallback về localStorage.
+// Not configured -> null, and the store falls back to localStorage.
 export const supabase = url && key ? createClient(url, key) : null
 ```
 
-## 6. Cho store đồng bộ Supabase (fallback localStorage)
+## 6. Make the store sync with Supabase (fallback to localStorage)
 
-Sửa `frontend/src/stores/favorites.js` — thêm logic: nếu đã đăng nhập thì đọc/ghi Supabase,
-chưa thì dùng localStorage như cũ.
+Edit `frontend/src/stores/favorites.js`: when the user is signed in, read/write Supabase;
+otherwise keep using localStorage as before.
 
 ```js
 import { defineStore } from 'pinia'
@@ -133,9 +133,9 @@ export const useFavoritesStore = defineStore('favorites', {
 })
 ```
 
-Gọi `useFavoritesStore().init()` một lần trong `App.vue` (onMounted).
+Call `useFavoritesStore().init()` once in `App.vue` (onMounted).
 
-## 7. Màn đăng nhập tối giản
+## 7. Minimal sign-in screen
 
 ```vue
 <script setup>
@@ -148,10 +148,10 @@ const signOut = () => supabase.auth.signOut()
 </script>
 ```
 
-Thêm route `/login` + nút đăng nhập/đăng xuất ở header.
+Add a `/login` route + sign-in/sign-out buttons in the header.
 
 ---
 
-## Lưu ý
-- `anon key` để lộ ở frontend là BÌNH THƯỜNG — bảo mật nằm ở **RLS** (bước 2), không phải giấu key.
-- Có thể tự migrate dữ liệu localStorage cũ lên Supabase ở lần đăng nhập đầu (đọc localStorage rồi insert).
+## Notes
+- Exposing the `anon key` in the frontend is NORMAL: security comes from **RLS** (step 2), not from hiding the key.
+- Old localStorage data can be migrated to Supabase on the first sign-in (read localStorage, then insert).

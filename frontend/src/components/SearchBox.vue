@@ -72,13 +72,11 @@ function goMatch() {
   router.push({ name: 'matches', query: { q: term } })
 }
 
-const placeholder = computed(() =>
-  state.locale === 'en' ? 'Search leagues, countries, country A vs B…' : 'Tìm giải, quốc gia, ĐTQG A vs B…'
-)
-const secCountries = computed(() => (state.locale === 'en' ? 'Countries' : 'Quốc gia'))
-const secLeagues = computed(() => (state.locale === 'en' ? 'Leagues' : 'Giải đấu'))
-const wordLeagues = computed(() => (state.locale === 'en' ? 'leagues' : 'giải'))
-const noResults = computed(() => (state.locale === 'en' ? 'No matches' : 'Không có kết quả'))
+const placeholder = computed(() => t('searchBoxPh'))
+const secCountries = computed(() => t('secCountries'))
+const secLeagues = computed(() => t('secLeagues'))
+const wordLeagues = computed(() => t('wordLeagues'))
+const noResults = computed(() => t('noMatchesShort'))
 function countryLabel(c) {
   return state.locale === 'en' ? c.name : c.vi || c.name
 }

@@ -162,6 +162,18 @@ export const messages = {
     teamNotFound: 'Không tìm thấy đội',
     seeMatches: 'Xem trận đấu',
     loadingMatches: 'Đang tải trận đấu…',
+    // UI strings moved here from components (keeps all Vietnamese text in this dictionary)
+    switchLang: 'English',
+    comparePlayers: 'So sánh cầu thủ',
+    themeLight: 'Chuyển sáng',
+    themeDark: 'Chuyển tối',
+    searchBoxPh: 'Tìm giải, quốc gia, ĐTQG A vs B…',
+    secCountries: 'Quốc gia',
+    secLeagues: 'Giải đấu',
+    wordLeagues: 'giải',
+    noMatchesShort: 'Không có kết quả',
+    loadMatchErr: 'Không tải được trận đấu',
+    loadFixturesErr: 'Không tải được dữ liệu trận đấu',
   },
   en: {
     search_ph: 'Search clubs, players, club A vs B…',
@@ -315,6 +327,18 @@ export const messages = {
     teamNotFound: 'Team not found',
     seeMatches: 'See matches',
     loadingMatches: 'Loading matches…',
+    // UI strings moved here from components
+    switchLang: 'Tiếng Việt',
+    comparePlayers: 'Compare players',
+    themeLight: 'Switch to light',
+    themeDark: 'Switch to dark',
+    searchBoxPh: 'Search leagues, countries, country A vs B…',
+    secCountries: 'Countries',
+    secLeagues: 'Leagues',
+    wordLeagues: 'leagues',
+    noMatchesShort: 'No matches',
+    loadMatchErr: 'Could not load the match',
+    loadFixturesErr: 'Could not load fixtures',
   },
 }
 

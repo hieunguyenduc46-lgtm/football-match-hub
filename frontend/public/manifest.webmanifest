@@ -1,7 +1,7 @@
 {
   "name": "Football Match Hub",
   "short_name": "Match Hub",
-  "description": "Kết quả, lịch thi đấu, đội hình và cầu thủ bóng đá.",
+  "description": "Live scores, fixtures, line-ups and player statistics for football fans.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

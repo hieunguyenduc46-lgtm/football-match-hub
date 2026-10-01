@@ -6,6 +6,7 @@ import { isFinished, isLiveFixture, isStaleLive, isOff, offStatusKey, isBreak, b
 import { roundLabel } from '../utils/roundNames'
 import { leagueName } from '../utils/leagueNames'
 import { setTitle } from '../utils/title'
+import { t } from '../i18n'
 import LineupPitch from '../components/LineupPitch.vue'
 import MatchTimeline from '../components/MatchTimeline.vue'
 import MatchStats from '../components/MatchStats.vue'
@@ -176,7 +177,7 @@ async function loadMatch() {
   ])
   if (seq !== loadSeq) return                     // already switched to another match
   if (fRes.status === 'fulfilled') fixture.value = fRes.value.data.response?.[0] || null
-  else error.value = fRes.reason?.message || 'Không tải được trận đấu'
+  else error.value = fRes.reason?.message || t('loadMatchErr')
   if (fixture.value) setTitle(`${teamName(fixture.value.teams.home.name)} - ${teamName(fixture.value.teams.away.name)}`)
   if (fixture.value) detectLeg(seq)   // infer 1st/2nd leg + compute aggregate (knockout rounds only)
   if (lRes.status === 'fulfilled') lineups.value = lRes.value.data.response || []

@@ -332,7 +332,7 @@ function goPlayer(id) {
                 <td>{{ row.rank }}</td>
                 <td class="team-cell">
                   <router-link :to="{ name: 'team', params: { id: row.team.id } }" class="team-cell">
-                    <img loading="lazy" :src="row.team.logo" @error="imgFallback" />{{ teamName(row.team.name) }}<span v-if="favs.isTeamFav(row.team.id)" class="fav-star" title="Đang theo dõi">★</span>
+                    <img loading="lazy" :src="row.team.logo" @error="imgFallback" />{{ teamName(row.team.name) }}<span v-if="favs.isTeamFav(row.team.id)" class="fav-star" :title="$t('following')">★</span>
                   </router-link>
                 </td>
                 <td>{{ row.all.played }}</td>

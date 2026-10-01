@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import api from '../services/api'
+import { t } from '../i18n'
 
 // Store holding the fixture list + loading/error state.
 // Logic: call the backend once, then filter by tab on the UI side (HomeView).
@@ -22,7 +23,7 @@ export const useFixturesStore = defineStore('fixtures', {
         this.fixtures = data.response || []
       } catch (e) {
         if (seq !== this._seq) return
-        this.error = e?.message || 'Không tải được dữ liệu trận đấu'
+        this.error = e?.message || t('loadFixturesErr')
         if (!opts.silent) this.fixtures = []
       } finally {
         if (seq === this._seq && !opts.silent) this.loading = false

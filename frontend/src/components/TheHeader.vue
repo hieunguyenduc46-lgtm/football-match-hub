@@ -155,19 +155,19 @@ function toggleTheme() {
         </div>
       </div>
 
-      <button class="theme-btn" @click="toggleLang" :title="state.locale === 'vi' ? 'English' : 'Tiếng Việt'" style="font-size:12px;font-weight:800">
+      <button class="theme-btn" @click="toggleLang" :title="$t('switchLang')" style="font-size:12px;font-weight:800">
         {{ state.locale === 'vi' ? 'EN' : 'VI' }}
       </button>
 
-      <router-link to="/compare" class="theme-btn" title="So sánh cầu thủ" style="display:flex;align-items:center;justify-content:center;text-decoration:none">
+      <router-link to="/compare" class="theme-btn" :title="$t('comparePlayers')" style="display:flex;align-items:center;justify-content:center;text-decoration:none">
         ⇄
       </router-link>
 
-      <router-link to="/favorites" class="theme-btn" title="Đang theo dõi" style="display:flex;align-items:center;justify-content:center;text-decoration:none">
+      <router-link to="/favorites" class="theme-btn" :title="$t('following')" style="display:flex;align-items:center;justify-content:center;text-decoration:none">
         ♥
       </router-link>
 
-      <button class="theme-btn" @click="toggleTheme" :title="theme === 'dark' ? 'Chuyển sáng' : 'Chuyển tối'">
+      <button class="theme-btn" @click="toggleTheme" :title="theme === 'dark' ? $t('themeLight') : $t('themeDark')">
         {{ theme === 'dark' ? '☀️' : '🌙' }}
       </button>
     </div>
