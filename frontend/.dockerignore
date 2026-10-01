@@ -1,0 +1,8 @@
+# Only the source code is needed; dependencies are installed fresh inside the image.
+node_modules/
+dist/
+coverage/
+reports/
+tests/
+.env
+.DS_Store

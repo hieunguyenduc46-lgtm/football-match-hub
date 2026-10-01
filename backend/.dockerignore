@@ -1,0 +1,13 @@
+# Keep secrets and local files OUT of the Docker image.
+# Without this, "COPY . ." would copy backend/.env (the API key) into the image.
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+tests/
+.pytest_cache/
+.coverage
+coverage.xml
+reports/

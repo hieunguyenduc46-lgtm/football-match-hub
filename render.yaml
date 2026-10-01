@@ -1,4 +1,4 @@
-# Render Blueprint cho backend FastAPI.
+# Render Blueprint for the FastAPI backend.
 # On Render: New + -> Blueprint -> pick this repo. Render reads this file automatically.
 services:
   - type: web
