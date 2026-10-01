@@ -1,9 +1,10 @@
 #!/bin/bash
 # Post-deployment smoke test: is the environment really up and running the version we just built?
-# Usage: bash ci/smoke_test.sh <frontend_url> <backend_url> <expected_version>
+# Usage: bash ci/smoke_test.sh <frontend_url> <backend_url> <expected_version> [expected_mock_mode]
 FRONTEND="$1"
 BACKEND="$2"
 EXPECTED="$3"
+EXPECTED_MOCK="${4:-}"     # true (staging) / false (production); empty = not checked
 
 echo "Smoke test: frontend=$FRONTEND backend=$BACKEND expected version=$EXPECTED"
 
@@ -25,7 +26,13 @@ if ! echo "$BODY" | grep -q "\"version\":\"$EXPECTED\""; then
     exit 1
 fi
 
-# 3. Frontend page, the nginx -> backend proxy, and one real API route.
+# 3. Right data source: staging uses mock data, production must use the real API.
+if [ -n "$EXPECTED_MOCK" ] && ! echo "$BODY" | grep -q "\"mock_mode\":$EXPECTED_MOCK"; then
+    echo "FAIL: expected mock_mode=$EXPECTED_MOCK (production must not serve sample data)"
+    exit 1
+fi
+
+# 4. Frontend page, the nginx -> backend proxy, and one real API route.
 check() {
     if curl -fsS --max-time 10 "$1" | grep -q "$2"; then
         echo "  OK   $1"

@@ -27,8 +27,6 @@ pipeline {
         PATH = "/opt/homebrew/bin:/usr/local/bin:${env.PATH}"
         BACKEND_IMAGE  = 'fmh-backend'
         FRONTEND_IMAGE = 'fmh-frontend'
-        // Tests and CI never call the paid API.
-        USE_MOCK = 'true'
         // Python 3.13 (from Anaconda on this Mac). The macOS system Python 3.9 is too old for
         // current FastAPI and security tools. Each build creates its own clean venv from it.
         PYTHON = '/opt/anaconda3/bin/python3.13'
@@ -134,7 +132,7 @@ pipeline {
                 sh '''
                     docker network inspect fmh-monitoring > /dev/null 2>&1 || docker network create fmh-monitoring
                     docker compose -p fmh-staging --env-file deploy/staging.env -f deploy/docker-compose.yml up -d --remove-orphans
-                    bash ci/smoke_test.sh http://localhost:8081 http://localhost:8001 "$IMAGE_TAG"
+                    bash ci/smoke_test.sh http://localhost:8081 http://localhost:8001 "$IMAGE_TAG" true
                 '''
             }
             post {

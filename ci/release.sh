@@ -23,7 +23,7 @@ fi
 
 IMAGE_TAG="$IMAGE_TAG" $COMPOSE up -d --remove-orphans
 
-if bash ci/smoke_test.sh "$FRONTEND_URL" "$BACKEND_URL" "$IMAGE_TAG"; then
+if bash ci/smoke_test.sh "$FRONTEND_URL" "$BACKEND_URL" "$IMAGE_TAG" false; then
     echo "$IMAGE_TAG" > "$STATE_DIR/current"
     [ -n "$PREVIOUS" ] && echo "$PREVIOUS" > "$STATE_DIR/previous"
     echo "RELEASE OK: production is now running $IMAGE_TAG ($FRONTEND_URL)"
@@ -37,7 +37,7 @@ if [ -n "$PREVIOUS" ]; then
     echo "ROLLING BACK production to $PREVIOUS ..."
     export BACKEND_INTERNAL_PORT=8000
     IMAGE_TAG="$PREVIOUS" $COMPOSE up -d --remove-orphans
-    if bash ci/smoke_test.sh "$FRONTEND_URL" "$BACKEND_URL" "$PREVIOUS"; then
+    if bash ci/smoke_test.sh "$FRONTEND_URL" "$BACKEND_URL" "$PREVIOUS" false; then
         echo "ROLLBACK OK: production restored to $PREVIOUS"
     else
         echo "ROLLBACK FAILED: manual action needed"

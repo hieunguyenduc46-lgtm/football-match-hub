@@ -12,7 +12,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV}
       APP_VERSION: ${IMAGE_TAG}
-      USE_MOCK: ${USE_MOCK:-true}
+      USE_MOCK: ${APP_USE_MOCK:-true}
       # Production only: injected from Jenkins Credentials at release time, never stored in Git.
       API_FOOTBALL_KEY: ${API_FOOTBALL_KEY:-}
       # Port uvicorn listens on inside the container (changed only to simulate a bad release).
